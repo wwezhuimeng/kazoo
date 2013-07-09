@@ -1,0 +1,14 @@
+{application, blackhole,
+ [
+  {description, "blackhole - websocket"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  cowboy,
+                  socketio
+                 ]},
+  {mod, { blackhole_app, []}},
+  {env, []}
+ ]}.
