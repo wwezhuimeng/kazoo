@@ -8,11 +8,11 @@
 
 -module(blackhole_ws).
 
+
 -export([open/3
 		 ,recv/4
 		 ,close/3
 		]).
-
 
 open(Pid, _SId, _Opts) ->
     io:format("open ~p~n", [Pid]),
@@ -20,9 +20,12 @@ open(Pid, _SId, _Opts) ->
 
 close(Pid, _SId, _State) ->
     io:format("close ~p~n", [Pid]),
-    case ets:match_object(blackhole_session:get_name(), {'_', Pid}) of
-    	[{ConfId, _}|_] ->
-    		broadcast_event(ConfId, <<"user_disconnected">>, [{}]);
+    case blackhole_session:get_session_from_pid(Pid) of
+    	[Session|_] ->
+    		Info = blackhole_session:session_to_proplist(Session),
+    		ConfId = proplists:get_value('conf_id', Info),
+    		UserName = proplists:get_value('user_name', Info),
+    		broadcast_event(ConfId, <<"user_disconnected">>, [{<<"user_name">>, UserName}]);
     	_ -> 'ok'
     end,
     blackhole_session:remove_session(Pid),
@@ -44,20 +47,26 @@ recv(_Pid, _SId, Message, State) ->
     io:format("recv unknow message ~p~n", [Message]),
     {'ok', State}.
 
-
+%% Connection Event
 handle_event(<<"connection">>, Data, Pid) ->
 	ConfId = proplists:get_value(<<"conf_name">>, Data),
-	blackhole_session:add_session(ConfId, Pid),
+	UserName = proplists:get_value(<<"user_name">>, Data),
+	blackhole_session:add_session(ConfId, Pid, UserName),
 	socketio_session:send_event(Pid, <<"connected">>, [{<<"conf_name">>, ConfId}]),
 	broadcast_event(ConfId, <<"user_connected">>, Data);
-handle_event(_Event, _Data, Pid) ->
-	io:format("Got unknown event ~p~n", [_Event]),
-	socketio_session:send_event(Pid, <<"unknown_event">>, [{}]).
+%% Unknown Event
+handle_event(Event, Data, Pid) ->
+	io:format("Got unknown event ~p~n", [Event]),
+	Unknown = [{<<"event">>, Event}
+			   ,{<<"data">>, Data}
+			  ],
+	socketio_session:send_event(Pid, <<"unknown_event">>, Unknown).
 
 broadcast_event(ConfId, Event, Data) ->
-	Sessions = ets:lookup(blackhole_session:get_name(), ConfId),
+	Sessions = blackhole_session:get_sessions(ConfId),
 	lists:foldl(
-		fun({_, Pid}, _) ->
+		fun(Session, _) ->
+			Pid = proplists:get_value('pid', blackhole_session:session_to_proplist(Session)),
 			socketio_session:send_event(Pid, Event, Data)
 		end
 		,'ok'

@@ -9,6 +9,8 @@
 
 -behaviour(gen_server).
 
+-include("blackhole_session.hrl").
+
 -export([start_link/0]).
 
 -export([init/1
@@ -19,13 +21,14 @@
          ,code_change/3
         ]).
 
--export([add_session/2
+-export([add_session/3
          ,remove_session/1
-         ,remove_session/2
          ,remove_conference/1
+         ,get_session_from_pid/1
+         ,get_sessions/1
         ]).
 
--export([get_name/0]).
+-export([session_to_proplist/1]).
 
 -define(SESSIONS, 'blackhole_session').
 
@@ -53,25 +56,43 @@ init([]) ->
     Sessions = ets:new(?SESSIONS, ['named_table'
                                    ,'duplicate_bag'
                                    ,'protected'
+                                   ,{'keypos', #blackhole_session.conf_id}
                                   ]),
-    {ok, Sessions}.
+    {'ok', Sessions}.
 
 
-get_name() ->
-    gen_server:call(?MODULE, 'get_name').
-
-add_session(ConfId, Pid) ->
-    gen_server:cast(?MODULE, {'add_session', ConfId, Pid}).
-
-
-remove_session(Pid) ->
-    gen_server:cast(?MODULE, {'remove_session', Pid}).
-
-remove_session(ConfId, Pid) ->
-    gen_server:cast(?MODULE, {'remove_session', ConfId, Pid}).
+add_session(ConfId, Pid, UserName) ->
+    Session = #blackhole_session{conf_id=ConfId
+                                 ,pid=Pid
+                                 ,user_name=UserName
+                                },
+    gen_server:cast(?MODULE, {'add_session', Session}).
 
 remove_conference(ConfId) ->
     gen_server:cast(?MODULE, {'remove_conference', ConfId}).
+
+remove_session(Pid) ->
+    Session = #blackhole_session{pid=Pid
+                                 ,_='_'
+                                },
+    gen_server:cast(?MODULE, {'remove_session', Session}).
+
+get_session_from_pid(Pid) ->
+    Session = #blackhole_session{pid=Pid
+                                 ,_='_'
+                                },
+    ets:match_object(?SESSIONS, Session).
+
+get_sessions(ConfId) ->
+    ets:lookup(?SESSIONS, ConfId).
+
+session_to_proplist(Session) ->
+    [{'conf_id', Session#blackhole_session.conf_id}
+     ,{'pid', Session#blackhole_session.pid}
+     ,{'user_name', Session#blackhole_session.user_name}
+    ].
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -87,8 +108,6 @@ remove_conference(ConfId) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call('get_name', _From, State) ->
-    {'reply', ?SESSIONS, State};
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
 
@@ -102,17 +121,14 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({'add_session', ConfId, Pid}, State) ->
-    ets:insert(?SESSIONS, {ConfId, Pid}),
+handle_cast({'add_session', Session}, State) ->
+    ets:insert(?SESSIONS, Session),
     {'noreply', State};
 handle_cast({'remove_conference', ConfId}, State) ->
     ets:delete(?SESSIONS, ConfId),
     {'noreply', State};
-handle_cast({'remove_session', Pid}, State) ->
-    ets:match_delete(?SESSIONS, {'_', Pid}),
-    {'noreply', State};
-handle_cast({'remove_session', ConfId, Pid}, State) ->
-    ets:delete_object(?SESSIONS, {ConfId, Pid}),
+handle_cast({'remove_session', Session}, State) ->
+    ets:match_delete(?SESSIONS, Session),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
