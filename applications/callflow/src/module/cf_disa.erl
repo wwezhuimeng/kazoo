@@ -84,7 +84,7 @@ allow_dial(Data, Call, Retries) ->
             lager:info("callflow ~s satisfies request", [wh_json:get_value(<<"_id">>, Flow)]),
             Updates = [fun(C) -> whapps_call:set_request(list_to_binary([Number, "@", whapps_call:request_realm(C)]), C) end
                        ,fun(C) -> whapps_call:set_to(list_to_binary([Number, "@", whapps_call:to_realm(C)]), C) end
-                       ,fun(C) when NoMatch -> 
+                       ,fun(C) when NoMatch ->
                                 {CIDNum, CIDName} = cf_attributes:caller_id(<<"external">>, C),
                                 C1 = whapps_call:set_caller_id_number(CIDNum, C),
                                 whapps_call:set_caller_id_name(CIDName, C1);
