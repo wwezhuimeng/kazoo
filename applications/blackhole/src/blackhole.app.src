@@ -6,9 +6,8 @@
   {applications, [
                   kernel,
                   stdlib,
-                  cowboy,
-                  socketio
+                  cowboy
                  ]},
-  {mod, { blackhole_app, []}},
+  {mod, {blackhole_app, []}},
   {env, []}
  ]}.
