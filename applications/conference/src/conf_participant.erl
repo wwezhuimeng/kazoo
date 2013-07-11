@@ -361,8 +361,8 @@ handle_cast({<<"add-member">>, JObj}, #participant{bridge='undefined'
 handle_cast({<<"add-member">>, JObj}, #participant{bridge=Bridge}=Participant) ->
     {'noreply', add_member(JObj, Bridge, Participant)};
 handle_cast({<<"del-member">>, JObj}, #participant{conference=Conference}=Participant) ->
-    _ = spawn(fun() -> 
-            conference_history:del_member(JObj ,whapps_conference:to_json(Conference)) 
+    _ = spawn(fun() ->
+            conference_history:del_member(JObj ,whapps_conference:to_json(Conference))
           end),
     {'stop', {'shutdown', 'hungup'}, Participant};
 handle_cast('play_member_entry', #participant{conference=Conference}=Participant) ->
@@ -539,7 +539,7 @@ add_member(JObj, Call, #participant{in_conference='false'
         'false' ->
             lager:debug("caller has joined the local conference as member ~p", [ParticipantId]),
             gen_listener:cast(self(), 'play_member_entry')
-    end, 
+    end,
     whapps_conference:join_muted(Conference) andalso gen_listener:cast(self(), 'mute'),
     whapps_conference:join_deaf(Conference) andalso gen_listener:cast(self(), 'deaf'),
     _ = spawn(fun() -> notify_requestor(whapps_call:controller_queue(Call)
@@ -548,8 +548,8 @@ add_member(JObj, Call, #participant{in_conference='false'
                                         ,whapps_conference:id(Conference)
                                        )
               end),
-    _ = spawn(fun() -> 
-                conference_history:add_member(JObj ,whapps_conference:to_json(Conference)) 
+    _ = spawn(fun() ->
+                conference_history:add_member(JObj ,whapps_conference:to_json(Conference))
               end),
     Participant#participant{in_conference='true'
                             ,muted=Muted
