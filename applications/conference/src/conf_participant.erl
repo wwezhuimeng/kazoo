@@ -614,7 +614,7 @@ notify_requestor(MyQ, MyId, DiscoveryEvent, ConferenceId) ->
             wapi_conference:publish_discovery_resp(RequestorQ, Resp)
     end.
 
--spec bridge_to_conference/3 :: (ne_binary(), whapps_conference:conference(), whapps_call:call()) -> 'ok'.
+-spec bridge_to_conference(ne_binary(), whapps_conference:conference(), whapps_call:call()) -> 'ok'.
 bridge_to_conference(Route, Conference, Call) ->
     lager:debug("briding to conference running at '~s'", [Route]),
     Endpoint = wh_json:from_list([{<<"Invite-Format">>, <<"route">>}
@@ -635,8 +635,8 @@ bridge_to_conference(Route, Conference, Call) ->
               ],
     whapps_call_command:send_command(Command, Call).
 
--spec publish_route_response/4 :: (ne_binary(), api_binary(), ne_binary(), ne_binary()) -> 'ok'.
-publish_route_response(ControllerQ, MsgId, ServerId, AccountId) ->
+-spec publish_route_response(ne_binary(), api_binary(), ne_binary()) -> 'ok'.
+publish_route_response(ControllerQ, MsgId, ServerId) ->
     lager:debug("sending route response for participant invite from local server"),
     Resp = [{<<"Msg-ID">>, MsgId}
             ,{<<"Routes">>, []}
@@ -645,7 +645,7 @@ publish_route_response(ControllerQ, MsgId, ServerId, AccountId) ->
             | wh_api:default_headers(ControllerQ, ?APP_NAME, ?APP_VERSION)],
     wapi_route:publish_resp(ServerId, Resp).
 
--spec send_authn_response/4 :: (api_binary(), ne_binary(), whapps_conference:conference(), whapps_call:call()) -> 'ok'.
+-spec send_authn_response(api_binary(), ne_binary(), whapps_conference:conference(), whapps_call:call()) -> 'ok'.
 send_authn_response(MsgId, ServerId, Conference, Call) ->
     lager:debug("sending authn response for participant invite from local server"),
     CCVs = [{<<"Username">>, whapps_conference:bridge_username(Conference)}
