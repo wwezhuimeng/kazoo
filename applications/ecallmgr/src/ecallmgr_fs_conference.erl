@@ -276,6 +276,27 @@ get_conf_command(<<"participants">>, _Focus, ConferenceId, JObj) ->
             end
     end;
 
+get_conf_command(<<"status">>, 'undefined', ConferenceId, _) ->
+    {'error', <<"Non-Existant ID ", ConferenceId/binary>>};
+
+get_conf_command(<<"status">>, _Focus, ConferenceId, JObj) ->
+    case wapi_conference:status_req_v(JObj) of
+        'false' -> {'error', <<"conference status failed to execute as JObj did not validate.">>};
+        'true' ->
+            case ecallmgr_fs_conferences:status(ConferenceId) of
+                'undefined' ->
+                    {'error', <<"no conference found with that id">>};
+                Conf ->
+                    case wh_json:is_true(<<"List-Participants">>, JObj, 'false') of
+                        'false' -> {'noop', Conf};
+                        'true' ->
+                            Ps = ecallmgr_fs_conferences:participants_list(ConferenceId),
+                            {'noop', wh_json:set_value(<<"Participants">>, Ps, Conf)}
+
+                    end
+            end
+    end;
+
 get_conf_command(<<"lock">>, _Focus, _ConferenceId, JObj) ->
     case wapi_conference:lock_v(JObj) of
         'false' ->
@@ -473,6 +494,12 @@ send_response(<<"participants">>, {'noop', Conference}, RespQ, Command) ->
             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     wapi_conference:publish_participants_resp(RespQ, Resp);
+send_response(<<"status">>, {'noop', Conference}, RespQ, Command) ->
+    
+    Resp = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command, <<>>)}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION) ++ wh_json:to_proplist(Conference)
+           ],
+    wapi_conference:publish_status_resp(RespQ, Resp);
 send_response(_, {'ok', Response}, RespQ, Command) ->
     case binary:match(Response, <<"not found">>) of
         'nomatch' -> 'ok';

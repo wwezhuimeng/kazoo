@@ -24,12 +24,12 @@
          ,flush_node/1
          ,sync_conferences/1
          ,relay_event/1
+         ,status/1
         ]).
 %% Participant-specific
 -export([participants_list/1
          ,participants_uuids/1
          ,participant_record_to_json/1
-         ,props_to_participant_record/2
         ]).
 -export([init/1
          ,handle_call/3
@@ -45,7 +45,7 @@
 -define(CONFERENCES_TBL, 'ecallmgr_conferences').
 
 -define(PARTICIPANT_UPDATE_MSG(Node, UUID, Updates), {'participant_update', Node, UUID, Updates}).
--define(PARTICIPANT_DESTROY_MSG(Node, UUID), {'participant_destroy', Node, UUID}).
+-define(PARTICIPANT_DESTROY_MSG(Node, Name, UUID), {'participant_destroy', Node, Name, UUID}).
 
 -record(conference, {name :: api_binary() | '$1' | '_'
                      ,uuid :: api_binary() | '$1' | '_'
@@ -60,7 +60,7 @@
                      ,dynamic = 'true' :: boolean() | '_'
                      ,exit_sound = 'true' :: boolean() | '_'
                      ,enter_sound = 'true' :: boolean() | '_'
-                     ,run_time = 0 :: non_neg_integer() | '_'
+                     ,run_time = wh_util:current_tstamp() :: non_neg_integer() | '_'
                      ,switch_hostname :: api_binary() | '_'
                      ,switch_url :: api_binary() | '_'
                      ,switch_external_ip :: api_binary() | '_'
@@ -68,20 +68,23 @@
 -type conference() :: #conference{}.
 -type conferences() :: [conference(),...] | [].
 
--record(participant, {uuid :: api_binary() | '$1' | '_'
-                      ,node :: atom() | '$2' | '_'
-                      ,conference_name :: api_binary() | '$1'| '_'
-                      ,floor = 'false' :: boolean() | '_'
-                      ,hear = 'true' :: boolean() | '_'
-                      ,speak = 'true' :: boolean() | '_'
-                      ,talking = 'false' :: boolean() | '_'
-                      ,mute_detect = 'false' :: boolean() | '_'
-                      ,member_id = 0 :: non_neg_integer() | '_'
-                      ,member_type :: api_binary() | '_'
-                      ,energy_level = 0 :: non_neg_integer() | '_'
-                      ,current_energy = 0 :: non_neg_integer() | '_'
-                      ,video = 'false' :: boolean() | '_'
-                      ,is_moderator = 'false' :: boolean() | '_'
+-record(participant, {uuid                      :: api_binary() | '$1' | '_'
+                      ,node                     :: atom() | '$2' | '_'
+                      ,conference_name          :: api_binary() | '$1'| '_'
+                      ,floor = 'false'          :: boolean() | '_'
+                      ,hear = 'true'            :: boolean() | '_'
+                      ,speak = 'true'           :: boolean() | '_'
+                      ,talking = 'false'        :: boolean() | '_'
+                      ,mute_detect = 'false'    :: boolean() | '_'
+                      ,member_id = 0            :: non_neg_integer() | '_'
+                      ,member_type              :: api_binary() | '_'
+                      ,energy_level = 0         :: non_neg_integer() | '_'
+                      ,current_energy = 0       :: non_neg_integer() | '_'
+                      ,video = 'false'          :: boolean() | '_'
+                      ,is_moderator = 'false'   :: boolean() | '_'
+                      ,caller_id_name           :: api_binary() | '_'
+                      ,caller_id_number         :: api_binary() | '_'
+                      ,custom_channel_vars = [] :: wh_proplist() | '_'
                      }).
 -type participant() :: #participant{}.
 -type participants() :: [participant(),...] | [].
@@ -179,7 +182,7 @@ destroy(Node, Props) ->
 
 -spec participant_destroy(atom(), ne_binary(), wh_proplist()) -> 'ok'.
 participant_destroy(Node, UUID, Props) when is_list(Props) ->
-    gen_server:call(?MODULE, ?PARTICIPANT_DESTROY_MSG(Node, UUID)),
+    gen_server:call(?MODULE, ?PARTICIPANT_DESTROY_MSG(Node, props:get_value(<<"Conference-Name">>, Props), UUID)),
     publish_participant_destroy_event(Node, UUID, Props).
 
 size(ConfId) ->
@@ -222,6 +225,13 @@ participants_list(ConfId) ->
             ]
     end.
 
+-spec status(ne_binary()) -> api_object().
+status(ConfId) ->
+    case ets:match_object(?CONFERENCES_TBL, #conference{name=ConfId, _='_'}) of
+        [] -> 'undefined';
+        [Conf] -> record_to_json(Conf)
+    end.
+
 -spec participants_uuids(ne_binary()) -> [ne_binaries() | atoms(),...] | [].
 participants_uuids(ConfId) ->
     ets:match(?CONFERENCES_TBL, #participant{conference_name=ConfId
@@ -245,6 +255,9 @@ participant_record_to_json(#participant{uuid=UUID
                                         ,video=Video
                                         ,is_moderator=IsMod
                                         ,node=Node
+                                        ,caller_id_name=CName
+                                        ,caller_id_number=CNum
+                                        ,custom_channel_vars=CCVs
                                        }) ->
     wh_json:from_list(
       props:filter_undefined(
@@ -262,24 +275,10 @@ participant_record_to_json(#participant{uuid=UUID
          ,{<<"Current-Energy">>, CurrentEnergy}
          ,{<<"Video">>, Video}
          ,{<<"Is-Moderator">>, IsMod}
+         ,{<<"Caller-ID-Name">>, CName}
+         ,{<<"Caller-ID-Number">>, CNum}
+         ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
         ])).
-
-props_to_participant_record(Node, Props) ->
-    #participant{node=Node
-                 ,uuid=props:get_value(<<"Call-ID">>, Props, props:get_value(<<"Unique-ID">>, Props))
-                 ,conference_name=props:get_value(<<"Conference-Name">>, Props)
-                 ,floor=props:get_is_true(<<"Floor">>, Props, 'false')
-                 ,hear=props:get_is_true(<<"Hear">>, Props, 'true')
-                 ,speak=props:get_is_true(<<"Speak">>, Props, 'true')
-                 ,talking=props:get_is_true(<<"Talking">>, Props, 'false')
-                 ,mute_detect=props:get_is_true(<<"Mute-Detect">>, Props, 'false')
-                 ,member_id=props:get_integer_value(<<"Participant-ID">>, Props, 0)
-                 ,member_type=props:get_value(<<"Participant-Type">>, Props)
-                 ,energy_level=props:get_integer_value(<<"Energy-Level">>, Props, 0)
-                 ,current_energy=props:get_integer_value(<<"Current-Energy">>, Props, 0)
-                 ,video=props:get_is_true(<<"Video">>, Props, 'false')
-                 ,is_moderator=props:get_is_true(<<"Is-Moderator">>, Props, 'false')
-                }.
 
 -spec handle_search_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_search_req(JObj, _Props) ->
@@ -364,6 +363,12 @@ handle_call(?PARTICIPANT_UPDATE_MSG(Node, UUID, Update), _, TID) ->
             lager:info("creating participant ~s on node ~s", [UUID, Node]),
             'true' = ets:insert_new(TID, #participant{uuid=UUID}),
             'true' = ets:update_element(TID, UUID, Update),
+
+            case props:get_value(#participant.conference_name, Update) of
+                'undefined' -> 'ok';
+                ConfId -> gen_server:cast(self(), {'new_participant', Node, ConfId})
+            end,
+
             {'reply', 'new', TID};
         [#participant{node=Node}] ->
             lager:debug("participant ~s on ~s, applying update", [UUID, Node]),
@@ -394,7 +399,7 @@ handle_call({'conference_destroy', Node, Name}, _, TID) ->
     N1 = ets:select_delete(TID, MatchSpecP),
     lager:info("removed ~p participant(s) in conference ~s on ~s", [N1, Name, Node]),
     {'reply', 'ok', TID};
-handle_call(?PARTICIPANT_DESTROY_MSG(Node, UUID), _, TID) ->
+handle_call(?PARTICIPANT_DESTROY_MSG(Node, Name, UUID), _, TID) ->
     MatchSpec = [{#participant{uuid='$1', node='$2', _ = '_'}
                   ,[{'andalso'
                      ,{'=:=', '$2', {'const', Node}}
@@ -404,6 +409,8 @@ handle_call(?PARTICIPANT_DESTROY_MSG(Node, UUID), _, TID) ->
                   ['true']
                  }],
     N = ets:select_delete(TID, MatchSpec),
+    gen_server:cast(self(), {'lost_participants', Node, Name, N}),
+
     lager:info("removed ~p participants(s) with uuid ~s on ~s", [N, UUID, Node]),
     {'reply', 'ok', TID};
 handle_call(_Req, _From, TID) ->
@@ -420,13 +427,44 @@ handle_call(_Req, _From, TID) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({'new_participant', Node, Name}, TID) ->
+    case [Conf || #conference{node=N}=Conf <- ets:lookup(TID, Name), Node =:= N] of
+        [] -> lager:debug("no conference ~s to update participant count", [Name]);
+        [#conference{node=Node
+                     ,participants=_Ps
+                    }] ->
+            lager:debug("adding participant to ~s (~b + 1)", [Name, _Ps]),
+            ets:update_counter(TID, Name, {#conference.participants, 1})
+    end,
+    {'noreply', TID};
+handle_cast({'lost_participants', _Node, _Name, 0}, TID) ->
+    {'noreply', TID};
+handle_cast({'lost_participants', Node, Name, Num}, TID) ->
+    case [Conf || #conference{node=N}=Conf <- ets:lookup(TID, Name), Node =:= N] of
+        [] -> lager:debug("no conference ~s to update participant count", [Name]);
+        [#conference{node=Node
+                     ,participants=Ps
+                    }] ->
+            lager:debug("removing participant to ~s (~b - ~b)", [Name, Ps, Num]),
+            ets:update_counter(TID, Name, {#conference.participants, -1*Num})
+    end,
+    {'noreply', TID};
+
 handle_cast({'sync_conferences', Node}, TID) ->
     Conferences = show_conferences(Node),
     lager:debug("ensuring conferences cache is in sync with ~s", [Node]),
     CachedConferences = ets:match_object(TID, #conference{node = Node, _ = '_'}) ++
         ets:match_object(TID, #participant{node = Node, _ = '_'}),
+
+    lager:debug("confs: ~p", [Conferences]),
+    lager:debug("cache: ~p", [CachedConferences]),
+
     Remove = subtract_from(CachedConferences, Conferences),
     Add = subtract_from(Conferences, CachedConferences),
+
+    lager:debug("rm: ~p", [Remove]),
+    lager:debug("add: ~p", [Add]),
+
     _ = [ets:delete_object(TID, R) || R <- Remove],
     _ = [ets:insert(TID, C) || C <- Add],
     {'noreply', TID};
@@ -520,28 +558,31 @@ xml_list_to_records([#xmlElement{name='conference'
                                  ,content=Participants
                                 }=ConfXml
                      |Confs], Node, Recs) ->
-    xml_list_to_records(Confs, Node, [xml_to_conference(ConfXml, Node)
-                                      | xml_members_to_records(Participants, Node) ++ Recs
+    #conference{name=ConfId}=Conf = xml_to_conference(ConfXml, Node),
+
+    xml_list_to_records(Confs, Node, [Conf
+                                      | xml_members_to_records(ConfId, Participants, Node) ++ Recs
                                      ]);
 xml_list_to_records([_El|Els], Node, Recs) ->
     xml_list_to_records(Els, Node, Recs);
 xml_list_to_records(#xmlElement{name='conference'
                                 ,content=Participants
                                }=ConfXml, Node, Recs) ->
-    [xml_to_conference(ConfXml, Node)
-     | xml_members_to_records(Participants, Node) ++ Recs
+    #conference{name=ConfId}=Conf = xml_to_conference(ConfXml, Node),
+    [Conf
+     | xml_members_to_records(ConfId, Participants, Node) ++ Recs
     ];
 xml_list_to_records(_, _, Recs) -> Recs.
 
-xml_members_to_records([], _Node) -> [];
-xml_members_to_records([#xmlElement{name='members'
-                                    ,content=Participants
-                                   }
-                        |_], Node) ->
-    [xml_to_participant(P, Node)
+xml_members_to_records(_ConfId, [], _Node) -> [];
+xml_members_to_records(ConfId, [#xmlElement{name='members'
+                                             ,content=Participants
+                                            }
+                                 |_], Node) ->
+    [xml_to_participant(ConfId, P, Node)
      || #xmlElement{name='member'}=P <- Participants
     ];
-xml_members_to_records([_El|Els], Node) -> xml_members_to_records(Els, Node).
+xml_members_to_records(ConfId, [_El|Els], Node) -> xml_members_to_records(ConfId, Els, Node).
 
 record_to_json(#conference{switch_hostname='undefined'
                            ,node=Node
@@ -575,7 +616,8 @@ record_to_json(#conference{uuid=UUID
          ,{<<"Running">>, Running}
          ,{<<"Answered">>, Answered}
          ,{<<"Dynamic">>, Dynamic}
-         ,{<<"Run-Time">>, RunTime}
+         ,{<<"Run-Time">>, wh_util:elapsed_s(RunTime)}
+         ,{<<"Start-Time">>, RunTime}
          ,{<<"Switch-Hostname">>, SwitchHostname}
          ,{<<"Switch-URL">>, SwitchUrl}
          ,{<<"Switch-External-IP">>, SwitchExtIp}
@@ -714,9 +756,11 @@ conference_fields(Props) -> fields(Props, ?FS_CONF_FIELDS).
                                 ,{<<"Energy-Level">>, #participant.energy_level, fun props:get_integer_value/2}
                                 ,{<<"Current-Energy">>, #participant.current_energy, fun props:get_integer_value/2}
                                 ,{<<"Video">>, #participant.video, fun props:get_is_true/2}
+                                ,{<<"Caller-Caller-ID-Name">>, #participant.caller_id_name}
+                                ,{<<"Caller-Caller-ID-Number">>, #participant.caller_id_number}
+                                ,{<<"Custom-Channel-Vars">>, #participant.custom_channel_vars, fun ecallmgr_util:custom_channel_vars/1}
                                ]).
-participant_fields(Props) ->
-    fields(Props, ?FS_PARTICIPANT_FIELDS).
+participant_fields(Props) -> fields(Props, ?FS_PARTICIPANT_FIELDS).
 
 fields(Props, Fields) ->
     lists:foldl(fun(K, Acc) -> maybe_include_key(K, Acc, Props) end, [], Fields).
@@ -728,6 +772,11 @@ maybe_include_key({K, Pos, Getter}, Acc, Props) ->
 maybe_include_key({K, Pos, Getter, Default}, Acc, Props) ->
     maybe_include_key(K, Pos, Acc, Props, Getter, Default).
 
+maybe_include_key(_K, Pos, Acc, Props, Getter) when is_function(Getter, 1) ->
+    case Getter(Props) of
+        'undefined' -> Acc;
+        V -> [{Pos, V} | Acc]
+    end;
 maybe_include_key(K, Pos, Acc, Props, Getter) when is_function(Getter, 2) ->
     case Getter(K, Props) of
         'undefined' -> Acc;
@@ -806,16 +855,18 @@ update_conference_record(Conf, 'exit_sound', V) ->
 update_conference_record(Conf, 'enter_sound', V) ->
     Conf#conference{enter_sound=wh_util:is_true(V)};
 update_conference_record(Conf, 'run_time', V) ->
-    Conf#conference{run_time=wh_util:to_integer(V)};
+    Conf#conference{run_time=wh_util:current_tstamp() - wh_util:to_integer(V)};
 update_conference_record(Conf, _K, _V) ->
     lager:debug("unhandled conference k/v ~s: ~p", [_K, _V]),
     Conf.
 
-xml_to_participant(#xmlElement{name='member'
-                               ,attributes=Attrs
-                               ,content=MemberTags
-                              }, Node) ->
-    update_from_children(from_attrs(Attrs, Node), MemberTags).
+xml_to_participant(ConfId, #xmlElement{name='member'
+                                       ,attributes=Attrs
+                                       ,content=MemberTags
+                                      }, Node) ->
+    P = update_from_children(from_attrs(Attrs, Node), MemberTags),
+    lager:debug("setting conf id: ~p: ~p", [ConfId, P]),
+    P#participant{conference_name=ConfId}.
 
 from_attrs(Attrs, Node) -> from_attrs(Attrs, Node, #participant{}).
 
@@ -824,7 +875,6 @@ from_attrs([#xmlAttribute{name='type'
                           ,value="caller"
                          }
             |Attrs], Node, P) ->
-    lager:debug("member is a caller"),
     from_attrs(Attrs, Node, P);
 from_attrs([_Attr|Attrs], Node, P) ->
     lager:debug("unhandled attr: ~p", [_Attr]),
@@ -848,6 +898,20 @@ update_from_children(P, [#xmlElement{name='uuid'
     CallId = wh_util:uri_decode(xml_text_to_binary(UUID)),
     lager:debug("uuid ~s callid ~s", [xml_text_to_binary(UUID), CallId]),
     update_from_children(P#participant{uuid=wh_util:to_binary(CallId)}, Els);
+update_from_children(P, [#xmlElement{name='caller_id_name'
+                                     ,content=RawCName
+                                    }
+                         |Els]) ->
+    CName = wh_util:uri_decode(xml_text_to_binary(RawCName)),
+    lager:debug("cname ~p ~p", [xml_text_to_binary(RawCName), CName]),
+    update_from_children(P#participant{caller_id_name=wh_util:to_binary(CName)}, Els);
+update_from_children(P, [#xmlElement{name='caller_id_number'
+                                     ,content=RawCNum
+                                    }
+                         |Els]) ->
+    CNum = wh_util:uri_decode(xml_text_to_binary(RawCNum)),
+    lager:debug("cnum ~p ~p", [xml_text_to_binary(RawCNum), CNum]),
+    update_from_children(P#participant{caller_id_name=wh_util:to_binary(CNum)}, Els);
 update_from_children(P, [#xmlElement{name='energy'
                                     ,content=Energy
                                     }

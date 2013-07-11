@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012, VoIP INC
+%%% @copyright (C) 2012-2013, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -18,6 +18,8 @@
 -export([kick/1, kick_v/1]).
 -export([participants_req/1, participants_req_v/1]).
 -export([participants_resp/1, participants_resp_v/1]).
+-export([status_req/1, status_req_v/1]).
+-export([status_resp/1, status_resp_v/1]).
 -export([lock/1, lock_v/1]).
 -export([mute_participant/1, mute_participant_v/1]).
 -export([play/1, play_v/1
@@ -49,8 +51,13 @@
 -export([publish_deaf_participant/2, publish_deaf_participant/3]).
 -export([publish_participant_energy/2, publish_participant_energy/3]).
 -export([publish_kick/2, publish_kick/3]).
--export([publish_participants_req/2, publish_participants_req/3]).
+
+-export([publish_participants_req/1, publish_participants_req/2, publish_participants_req/3]).
 -export([publish_participants_resp/2, publish_participants_resp/3]).
+
+-export([publish_status_req/1, publish_status_req/2, publish_status_req/3]).
+-export([publish_status_resp/2, publish_status_resp/3]).
+
 -export([publish_lock/2, publish_lock/3]).
 -export([publish_mute_participant/2, publish_mute_participant/3]).
 -export([publish_play/2, publish_play/3]).
@@ -160,6 +167,30 @@
                                    ,{<<"Event-Name">>, <<"participants_resp">>}
                                   ]).
 -define(PARTICIPANTS_RESP_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
+
+%% Conference Status Req
+-define(STATUS_REQ_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
+-define(OPTIONAL_STATUS_REQ_HEADERS, [<<"List-Participants">>]).
+-define(STATUS_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
+                            ,{<<"Event-Name">>, <<"command">>}
+                            ,{<<"Application-Name">>, <<"status">>}
+                           ]).
+-define(STATUS_REQ_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
+                           ,{<<"List-Participants">>, fun wh_util:is_boolean/1}
+                          ]).
+
+%% Conference Status Resp
+-define(STATUS_RESP_HEADERS, [<<"Conference-ID">>]).
+-define(OPTIONAL_STATUS_RESP_HEADERS, [<<"UUID">>
+                                       ,<<"Participant-Count">>, <<"Participants">>
+                                       ,<<"Participant-With-Floor">>, <<"Participant-Lost-Floor">>
+                                       ,<<"Running">>, <<"Answered">>, <<"Dynamic">>
+                                       ,<<"Run-Time">>, <<"Start-Time">>
+                                      ]).
+-define(STATUS_RESP_VALUES, [{<<"Event-Category">>, <<"conference">>}
+                             ,{<<"Event-Name">>, <<"status_resp">>}
+                            ]).
+-define(STATUS_RESP_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
 %% Conference Lock
 -define(LOCK_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
@@ -332,6 +363,7 @@
                          ,{<<"participant_energy">>, ?PARTICIPANT_ENERGY_VALUES, fun ?MODULE:participant_energy/1}
                          ,{<<"kick">>, ?KICK_VALUES, fun ?MODULE:kick/1}
                          ,{<<"participants">>, ?PARTICIPANTS_REQ_VALUES, fun ?MODULE:participants_req/1}
+                         ,{<<"status">>, ?STATUS_REQ_VALUES, fun ?MODULE:status_req/1}
                          ,{<<"lock">>, ?LOCK_VALUES, fun ?MODULE:lock/1}
                          ,{<<"mute_participant">>, ?MUTE_PARTICIPANT_VALUES, fun ?MODULE:mute_participant/1}
                          ,{<<"play">>, ?PLAY_VALUES, fun ?MODULE:play/1}
@@ -570,6 +602,42 @@ participants_resp(JObj) -> participants_resp(wh_json:to_proplist(JObj)).
 participants_resp_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?PARTICIPANTS_RESP_HEADERS, ?PARTICIPANTS_RESP_VALUES, ?PARTICIPANTS_RESP_TYPES);
 participants_resp_v(JObj) -> participants_resp_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec status_req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+status_req(Prop) when is_list(Prop) ->
+    case status_req_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?STATUS_REQ_HEADERS, ?OPTIONAL_STATUS_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for status request"}
+    end;
+status_req(JObj) -> status_req(wh_json:to_proplist(JObj)).
+
+-spec status_req_v(api_terms()) -> boolean().
+status_req_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?STATUS_REQ_HEADERS, ?STATUS_REQ_VALUES, ?STATUS_REQ_TYPES);
+status_req_v(JObj) -> status_req_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec status_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+status_resp(Prop) when is_list(Prop) ->
+    case status_resp_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?STATUS_RESP_HEADERS, ?OPTIONAL_STATUS_RESP_HEADERS);
+        'false' -> {'error', "Proplist failed validation for status response"}
+    end;
+status_resp(JObj) -> status_resp(wh_json:to_proplist(JObj)).
+
+-spec status_resp_v(api_terms()) -> boolean().
+status_resp_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?STATUS_RESP_HEADERS, ?STATUS_RESP_VALUES, ?STATUS_RESP_TYPES);
+status_resp_v(JObj) -> status_resp_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1037,13 +1105,21 @@ publish_kick(ConferenceId, Req, ContentType) ->
 %% Publish to the conference exchange
 %% @end
 %%--------------------------------------------------------------------
+-spec publish_participants_req(api_terms()) -> 'ok'.
 -spec publish_participants_req(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_participants_req(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_participants_req(JObj) ->
+    publish_participants_req(conference_id(JObj), JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participants_req(ConferenceId, JObj) ->
     publish_participants_req(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participants_req(ConferenceId, Req, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Req, ?PARTICIPANTS_REQ_VALUES, fun ?MODULE:participants_req/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
+
+conference_id(Props) when is_list(Props) ->
+    props:get_value(<<"Conference-ID">>, Props);
+conference_id(JObj) ->
+    wh_json:get_value(<<"Conference-ID">>, JObj).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1056,6 +1132,35 @@ publish_participants_resp(Queue, Resp) ->
     publish_participants_resp(Queue, Resp, ?DEFAULT_CONTENT_TYPE).
 publish_participants_resp(Queue, Resp, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Resp, ?PARTICIPANTS_RESP_VALUES, fun ?MODULE:participants_resp/1),
+    amqp_util:targeted_publish(Queue, Payload, ContentType).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Publish to the conference exchange
+%% @end
+%%--------------------------------------------------------------------
+-spec publish_status_req(api_terms()) -> 'ok'.
+-spec publish_status_req(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_status_req(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_status_req(JObj) ->
+    publish_status_req(conference_id(JObj), JObj, ?DEFAULT_CONTENT_TYPE).
+publish_status_req(ConferenceId, JObj) ->
+    publish_status_req(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_status_req(ConferenceId, Req, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?STATUS_REQ_VALUES, fun ?MODULE:status_req/1),
+    amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Publish to the conference exchange
+%% @end
+%%--------------------------------------------------------------------
+-spec publish_status_resp(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_status_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_status_resp(Queue, Resp) ->
+    publish_status_resp(Queue, Resp, ?DEFAULT_CONTENT_TYPE).
+publish_status_resp(Queue, Resp, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(Resp, ?STATUS_RESP_VALUES, fun ?MODULE:status_resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 %%--------------------------------------------------------------------
