@@ -53,18 +53,16 @@ message(Id, EndPoint, Msg) when is_integer(Id) ->
 message(Id, EndPoint, Msg) when is_binary(Id) ->
     <<"3:", Id/binary, ":", EndPoint/binary, ":", Msg/binary>>.
 
-json(Id, EndPoint, Msg) when is_integer(Id) ->
-    IdBin = binary:list_to_bin(integer_to_list(Id)),
-    JsonBin = jsx:term_to_json(Msg),
-    <<"4:", IdBin/binary, ":", EndPoint/binary, ":", JsonBin/binary>>;
-json(Id, EndPoint, Msg) when is_binary(Id) ->
-    JsonBin = jsx:term_to_json(Msg),
-    <<"4:", Id/binary, ":", EndPoint/binary, ":", JsonBin/binary>>.
+json(Id, EndPoint, JObj) ->
+    <<"4:", (wh_util:to_binary(Id))/binary
+        ,":", EndPoint/binary
+        ,":", (wh_json:encode(JObj))/binary>>.
 
-event(Id, EndPoint, EventName, EventArgs) when is_binary(Id), is_binary(EndPoint) ->
-    Msg = [{<<"name">>, EventName}, {<<"args">>, EventArgs}],
-    JsonBin = jsx:term_to_json(Msg),
-    <<"5:", Id/binary, ":", EndPoint/binary, ":", JsonBin/binary>>.
+event(Id, EndPoint, EventName, EventArgs) ->
+    JObj = wh_json:from_list([{<<"name">>, EventName}, {<<"args">>, EventArgs}]),
+    <<"5:", (wh_util:to_binary(Id))/binary
+        ,":", (wh_util:to_binary(EndPoint))/binary
+        ,":", (wh_json:encode(JObj))/binary>>.
 
 
 error(EndPoint, Reason) ->
@@ -124,16 +122,13 @@ decode_packet(<<"3:", Rest/binary>>) ->
 decode_packet(<<"4:", Rest/binary>>) ->
     {Id, R1} = id(Rest),
     {EndPoint, Data} = endpoint(R1),
-    {json, Id, EndPoint, jsx:json_to_term(Data)};
+    {json, Id, EndPoint, wh_json:decode(Data)};
 decode_packet(<<"5:", Rest/binary>>) ->
     {Id, R1} = id(Rest),
     {EndPoint, Data} = endpoint(R1),
-    Json = jsx:json_to_term(Data),
-    EventName = proplists:get_value(<<"name">>, Json),
-    EventArgs = case proplists:get_value(<<"args">>, Json) of
-                    [null] -> [];
-                    [Args] -> Args
-                end,
+    Json = wh_json:decode(Data),
+    EventName = wh_json:get_value(<<"name">>, Json),
+    [EventArgs] = wh_json:get_value(<<"args">>, Json, [wh_json:new()]),
     {event, Id, EndPoint, EventName, EventArgs};
 decode_packet(<<"7::", Rest/binary>>) ->
     {EndPoint, R1} = endpoint(Rest),
@@ -164,124 +159,3 @@ reason(X) ->
 	{E} -> E;
 	T -> T
     end.
-
-%%% Tests based off the examples on the page
-%%% ENCODING
-disconnect_test_() ->
-    [?_assertEqual(<<"0::/test">>, disconnect(<<"/test">>)),
-     ?_assertEqual(<<"0::">>, disconnect(<<>>))].
-
-connect_test_() -> []. % Only need to read, never to encode
-
-%% No format specified in the spec.
-heartbeat_test() ->
-    ?assertEqual(<<"2::">>, heartbeat()).
-
-message_test_() ->
-    [?_assertEqual(<<"3:1::blabla">>, message(1, <<"">>, <<"blabla">>)),
-     ?_assertEqual(<<"3:2::bla">>, message(2, <<"">>, <<"bla">>)),
-     ?_assertEqual(<<"3:::bla">>, message(<<"">>, <<"">>, <<"bla">>)),
-     ?_assertEqual(<<"3:4+:b:bla">>, message(<<"4+">>, <<"b">>, <<"bla">>)),
-     ?_assertEqual(<<"3::/test:bla">>, message(<<"">>, <<"/test">>, <<"bla">>))].
-
-json_test_() ->
-    [?_assertEqual(<<"4:1::{\"a\":\"b\"}">>,
-		   json(1, <<"">>, [{<<"a">>,<<"b">>}])),
-     %% No demo for this, but the specs specify it
-     ?_assertEqual(<<"4:1:/test:{\"a\":\"b\"}">>,
-		   json(1, <<"/test">>, [{<<"a">>,<<"b">>}])),
-     ?_assertEqual(<<"4:1+:/test:{\"a\":\"b\"}">>,
-		   json(<<"1+">>, <<"/test">>, [{<<"a">>,<<"b">>}])),
-     ?_assertEqual(<<"4::/test:{\"a\":\"b\"}">>,
-		   json(<<"">>, <<"/test">>, [{<<"a">>,<<"b">>}]))].
-
-error_test_() ->
-    %% No example, liberal interpretation
-    [?_assertEqual(<<"7::end:you+die">>,
-		   iolist_to_binary(error("end","you","die"))),
-     ?_assertEqual(<<"7:::you">>, iolist_to_binary(error("","you")))].
-
-%% DECODING TESTS
-d_disconnect_test_() ->
-    [?_assertEqual({disconnect, <<"/test">>}, decode_packet(<<"0::/test">>)),
-     ?_assertEqual(disconnect, decode_packet(<<"0">>))].
-
-d_connect_test_() ->
-    [].
-
-%%% No format specified in the spec.
-d_heartbeat_test() ->
-    ?assertEqual(heartbeat, decode_packet(heartbeat())).
-
-d_message_test_() ->
-    [?_assertEqual({message, 1, <<>>, <<"blabla">>}, decode_packet(message(1, <<"">>, <<"blabla">>))),
-     ?_assertEqual({message, 2, <<>>, <<"bla">>}, decode_packet(message(2, <<"">>, <<"bla">>))),
-     ?_assertEqual({message, <<"">>, <<>>, <<"bla">>}, decode_packet(message(<<"">>, <<"">>, <<"bla">>))),
-     ?_assertEqual({message, "4+", <<"b">>, <<"bla">>}, decode_packet(message(<<"4+">>, <<"b">>, <<"bla">>))),
-     ?_assertEqual({message, <<"">>, <<"/test">>, <<"bla">>}, decode_packet(message(<<"">>, <<"/test">>, <<"bla">>)))].
-
-d_json_test_() ->
-    [?_assertEqual({json, 1, <<>>, [{<<"a">>,<<"b">>}]},
-		   decode_packet(json(1, <<"">>, [{<<"a">>,<<"b">>}]))),
-     ?_assertEqual({json, 1, <<"/test">>, [{<<"a">>,<<"b">>}]},
-		   decode_packet(json(1, <<"/test">>, [{<<"a">>,<<"b">>}]))),
-     ?_assertEqual({json, "1+", <<"/test">>, [{<<"a">>,<<"b">>}]},
-		   decode_packet(json(<<"1+">>, <<"/test">>, [{<<"a">>,<<"b">>}]))),
-     ?_assertEqual({json, <<"">>, <<"/test">>, [{<<"a">>,<<"b">>}]},
-		   decode_packet(json(<<"">>, <<"/test">>, [{<<"a">>,<<"b">>}])))].
-
-d_error_test_() ->
-    %% No example, liberal interpretation
-    [?_assertEqual({error, <<"end">>, <<"you">>, <<"die">>},
-		   decode_packet(iolist_to_binary(error("end","you","die")))),
-     ?_assertEqual({error, <<"">>, <<"you">>}, decode_packet(iolist_to_binary(error("","you"))))].
-
-binary_utf8_split1_test_() ->
-    A = <<"Привет">>,
-    {A1, A2} = binary_utf8_split(A, 2),
-    [?_assertEqual(A1, <<"Пр">>),
-     ?_assertEqual(A2, <<"ивет">>)].
-
-binary_utf8_split2_test_() ->
-    A = <<"Hello world">>,
-    {A1, A2} = binary_utf8_split(A, 5),
-    B = <<>>,
-    {B1, B2} = binary_utf8_split(B, 2),
-    C = <<"ZZZ">>,
-    {C1, C2} = binary_utf8_split(C, 200),
-    D = <<"Z">>,
-    {D1, D2} = binary_utf8_split(D, 1),
-    [
-     ?_assertEqual(<<"Hello">>, A1),
-     ?_assertEqual(<<" world">>, A2),
-     ?_assertEqual(<<>>, B1),
-     ?_assertEqual(<<>>, B2),
-     ?_assertEqual(<<"ZZZ">>, C1),
-     ?_assertEqual(<<>>, C2),
-     ?_assertEqual(<<"Z">>, D1),
-     ?_assertEqual(<<>>, D2)
-    ].
-
-id_test_() ->
-    [
-     ?_assertEqual({12, <<"rest">>}, id(<<"12:rest">>)),
-     ?_assertEqual({<<>>, <<"rest">>}, id(<<":rest">>))
-    ].
-
-decode_frame_test_() ->
-    [
-     ?_assertEqual([{message, 1, <<>>, <<"blabla">>}], decode(<<?FRAME/utf8, "12", ?FRAME/utf8, "3:1::blabla">>)),
-     ?_assertEqual([{json, 1, <<>>, [{<<"a">>, <<"b">>}]},
-		    {message, 1, <<>>, <<"blabla">>}],
-		   decode(<<?FRAME/utf8, "14", ?FRAME/utf8, "4:1::{\"a\":\"b\"}",
-			    ?FRAME/utf8, "12", ?FRAME/utf8, "3:1::blabla">>))
-    ].
-
-encode_frame_test_() ->
-    [
-     ?_assertEqual(<<"3:::Привет">>, encode([{message, <<>>, <<>>, <<"Привет">>}])),
-     ?_assertEqual(<<?FRAME/utf8, "10", ?FRAME/utf8, "3:::Привет",
-		     ?FRAME/utf8, "8", ?FRAME/utf8, "4:::\"ZX\"">>,
-		   encode([{message, <<>>, <<>>, <<"Привет">>},
-			   {json, <<>>, <<>>, <<"ZX">>}]))
-    ].

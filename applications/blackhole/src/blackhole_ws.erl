@@ -14,6 +14,8 @@
 		 ,close/3
 		]).
 
+-export([broadcast_event/3]).
+
 open(Pid, _SId, _Opts) ->
     io:format("open ~p~n", [Pid]),
     {'ok', []}.
@@ -49,10 +51,10 @@ recv(_Pid, _SId, Message, State) ->
 
 %% Connection Event
 handle_event(<<"connection">>, Data, Pid) ->
-	ConfId = proplists:get_value(<<"conf_name">>, Data),
-	UserName = proplists:get_value(<<"user_name">>, Data),
+	ConfId = wh_json:get_value(<<"conf_name">>, Data),
+	UserName = wh_json:get_value(<<"user_name">>, Data),
 	blackhole_session:add_session(ConfId, Pid, UserName),
-	socketio_session:send_event(Pid, <<"connected">>, [{<<"conf_name">>, ConfId}]),
+	socketio_session:send_event(Pid, <<"connected">>, wh_json:from_list([{<<"conf_name">>, ConfId}])),
 	broadcast_event(ConfId, <<"user_connected">>, Data);
 %% Unknown Event
 handle_event(Event, Data, Pid) ->
