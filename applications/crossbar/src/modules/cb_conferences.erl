@@ -13,11 +13,11 @@
 -module(cb_conferences).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,validate/1, validate/2, validate/3
+         ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
+         ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
+         ,validate/1, validate/2, validate/3, validate/4
          ,put/1
-         ,post/2, post/3
+         ,post/2, post/4
          ,delete/2
         ]).
 
@@ -52,9 +52,14 @@ init() ->
 %% Failure here returns 405
 %% @end
 %%--------------------------------------------------------------------
--spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
+-spec allowed_methods() ->
+                             http_methods().
+-spec allowed_methods(path_token()) ->
+                             http_methods().
+-spec allowed_methods(path_token(), path_token()) ->
+                             http_methods().
+-spec allowed_methods(path_token(), path_token(), path_token() | integer()) ->
+                             http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 
@@ -62,16 +67,17 @@ allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
 allowed_methods(_, ?STATUS_PATH_TOKEN) ->
-    [?HTTP_GET];
-allowed_methods(_, ?MUTE_PATH_TOKEN) ->
+    [?HTTP_GET].
+
+allowed_methods(_, ?MUTE_PATH_TOKEN, _) ->
     [?HTTP_POST];
-allowed_methods(_, ?DEAF_PATH_TOKEN) ->
+allowed_methods(_, ?DEAF_PATH_TOKEN, _) ->
     [?HTTP_POST];
-allowed_methods(_, ?UNMUTE_PATH_TOKEN) ->
+allowed_methods(_, ?UNMUTE_PATH_TOKEN, _) ->
     [?HTTP_POST];
-allowed_methods(_, ?UNDEAF_PATH_TOKEN) ->
+allowed_methods(_, ?UNDEAF_PATH_TOKEN, _) ->
     [?HTTP_POST];
-allowed_methods(_, ?KICK_PATH_TOKEN) ->
+allowed_methods(_, ?KICK_PATH_TOKEN, _) ->
     [?HTTP_POST].
 
 %%--------------------------------------------------------------------
@@ -83,16 +89,21 @@ allowed_methods(_, ?KICK_PATH_TOKEN) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
+-spec resource_exists(path_token()) ->
+                             'true'.
+-spec resource_exists(path_token(), path_token()) ->
+                             'true'.
+-spec resource_exists(path_token(), path_token(), path_token() | integer()) ->
+                             'true'.
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
-resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
-resource_exists(_, ?MUTE_PATH_TOKEN) -> 'true';
-resource_exists(_, ?DEAF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?UNMUTE_PATH_TOKEN) -> 'true';
-resource_exists(_, ?UNDEAF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?KICK_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true'.
+
+resource_exists(_, ?MUTE_PATH_TOKEN, _) -> 'true';
+resource_exists(_, ?DEAF_PATH_TOKEN, _) -> 'true';
+resource_exists(_, ?UNMUTE_PATH_TOKEN, _) -> 'true';
+resource_exists(_, ?UNDEAF_PATH_TOKEN, _) -> 'true';
+resource_exists(_, ?KICK_PATH_TOKEN, _) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -119,24 +130,27 @@ validate(#cb_context{req_verb = ?HTTP_DELETE}=Context, Id) ->
     load_conference(Id, Context).
 
 validate(#cb_context{req_verb = ?HTTP_GET}=Context, Id, ?STATUS_PATH_TOKEN) ->
-    load_conference_status(Id, Context);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_PATH_TOKEN = Action) ->
-    validate_command(Context, Id, Action);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?DEAF_PATH_TOKEN = Action) ->
-    validate_command(Context, Id, Action);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNMUTE_PATH_TOKEN = Action) ->
-    validate_command(Context, Id, Action);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNDEAF_PATH_TOKEN = Action) ->
-    validate_command(Context, Id, Action);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Action) ->
-    validate_command(Context, Id, Action).
+    load_conference_status(Id, Context).
 
--spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_PATH_TOKEN = Action, PId) ->
+    validate_command(Context, Id, Action, PId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?DEAF_PATH_TOKEN = Action, PId) ->
+    validate_command(Context, Id, Action, PId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNMUTE_PATH_TOKEN = Action, PId) ->
+    validate_command(Context, Id, Action, PId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNDEAF_PATH_TOKEN = Action, PId) ->
+    validate_command(Context, Id, Action, PId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Action, PId) ->
+    validate_command(Context, Id, Action, PId).
+
+-spec post(cb_context:context(), path_token()) ->
+                  cb_context:context().
+-spec post(cb_context:context(), path_token(), path_token(), path_token() | integer()) ->
+                  cb_context:context().
 post(Context, _) ->
     crossbar_doc:save(Context).
 
-post(Context, _Id, _Action) ->
+post(Context, _Id, _Action, _PId) ->
     exec_command(Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
@@ -147,17 +161,20 @@ put(Context) ->
 delete(Context, _) ->
     crossbar_doc:delete(Context).
 
--spec validate_command(cb_context:context(), path_token(), path_token()) ->
+-spec validate_command(cb_context:context(), path_token(), path_token(), path_token() | integer()) ->
                               cb_context:context().
-validate_command(Context, Id, Action) ->
-    case cb_context:req_value(Context, <<"participant_id">>) of
-        'undefined' ->
-            cb_context:add_validation_error(<<"participant_id">>, <<"required">>, <<"field is required">>, Context);
+validate_command(Context, Id, Action, PId) ->
+    try wh_util:to_integer(PId) of
         Participant ->
             Exec = {action_to_app(Action), Id, wh_util:to_integer(Participant)},
             crossbar_util:response([<<"muting participant ">>, wh_util:to_binary(Participant)]
                                    ,cb_context:store('exec', Exec, Context))
+    catch
+        _E:_R ->
+            lager:debug("failed to convert participant ~p to int ~s: ~p", [PId, _E, _R]),
+            cb_context:add_validation_error(<<"participant_id">>, <<"type">>, <<"field must be an integer">>, Context)
     end.
+
 
 -spec action_to_app(path_token()) -> ne_binary().
 action_to_app(?MUTE_PATH_TOKEN) ->
