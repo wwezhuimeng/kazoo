@@ -42,8 +42,7 @@ update_status(?NE_BINARY = AcctId, AgentId, Status, Options) ->
     wapi_acdc_stats:publish_status_update(API).
 
 -spec most_recent_status(ne_binary(), ne_binary()) ->
-                                {'ok', ne_binary()} |
-                                {'error', any()}.
+                                {'ok', ne_binary()}.
 most_recent_status(AcctId, AgentId) ->
     case most_recent_ets_status(AcctId, AgentId) of
         {'ok', _}=OK -> OK;
