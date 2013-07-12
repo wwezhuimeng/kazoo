@@ -80,14 +80,14 @@ add_resp_header(K, V, #cb_context{resp_headers=RespHeaders}=Context) ->
 %% Helpers
 
 -spec add_content_types_provided(context(), crossbar_content_handler() | crossbar_content_handlers()) ->
-                                              context().
+                                        context().
 add_content_types_provided(#cb_context{content_types_provided=CTPs}=Context, [_|_]=NewCTPs) ->
     Context#cb_context{content_types_provided = NewCTPs ++ CTPs};
 add_content_types_provided(Context, {_, _}=NewCTP) ->
     add_content_types_provided(Context,[NewCTP]).
 
 -spec add_content_types_accepted(context(), crossbar_content_handler() | crossbar_content_handlers()) ->
-                                              context().
+                                        context().
 add_content_types_accepted(#cb_context{content_types_accepted=CTAs}=Context, [_|_]=NewCTAs) ->
     Context#cb_context{content_types_provided = NewCTAs ++ CTAs};
 add_content_types_accepted(Context, {_, _}=NewCTA) ->
