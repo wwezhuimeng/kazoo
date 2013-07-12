@@ -17,7 +17,7 @@
          ,resource_exists/0, resource_exists/1, resource_exists/2
          ,validate/1, validate/2, validate/3
          ,put/1
-         ,post/2
+         ,post/2, post/3
          ,delete/2
         ]).
 
@@ -25,6 +25,12 @@
 
 -define(CB_LIST, <<"conferences/crossbar_listing">>).
 -define(STATUS_PATH_TOKEN, <<"status">>).
+
+-define(MUTE_PATH_TOKEN, <<"mute">>).
+-define(UNMUTE_PATH_TOKEN, <<"unmute">>).
+-define(DEAF_PATH_TOKEN, <<"deaf">>).
+-define(UNDEAF_PATH_TOKEN, <<"undeaf">>).
+-define(KICK_PATH_TOKEN, <<"kick">>).
 
 %%%===================================================================
 %%% API
@@ -51,10 +57,22 @@ init() ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
+
 allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
+
 allowed_methods(_, ?STATUS_PATH_TOKEN) ->
-    [?HTTP_GET].
+    [?HTTP_GET];
+allowed_methods(_, ?MUTE_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?DEAF_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?UNMUTE_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?UNDEAF_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?KICK_PATH_TOKEN) ->
+    [?HTTP_POST].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -69,7 +87,12 @@ allowed_methods(_, ?STATUS_PATH_TOKEN) ->
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
-resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
+resource_exists(_, ?MUTE_PATH_TOKEN) -> 'true';
+resource_exists(_, ?DEAF_PATH_TOKEN) -> 'true';
+resource_exists(_, ?UNMUTE_PATH_TOKEN) -> 'true';
+resource_exists(_, ?UNDEAF_PATH_TOKEN) -> 'true';
+resource_exists(_, ?KICK_PATH_TOKEN) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -96,11 +119,25 @@ validate(#cb_context{req_verb = ?HTTP_DELETE}=Context, Id) ->
     load_conference(Id, Context).
 
 validate(#cb_context{req_verb = ?HTTP_GET}=Context, Id, ?STATUS_PATH_TOKEN) ->
-    load_conference_status(Id, Context).
+    load_conference_status(Id, Context);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_PATH_TOKEN = Action) ->
+    validate_command(Context, Id, Action);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?DEAF_PATH_TOKEN = Action) ->
+    validate_command(Context, Id, Action);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNMUTE_PATH_TOKEN = Action) ->
+    validate_command(Context, Id, Action);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNDEAF_PATH_TOKEN = Action) ->
+    validate_command(Context, Id, Action);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Action) ->
+    validate_command(Context, Id, Action).
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, _) ->
     crossbar_doc:save(Context).
+
+post(Context, _Id, _Action) ->
+    exec_command(Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
@@ -109,6 +146,52 @@ put(Context) ->
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, _) ->
     crossbar_doc:delete(Context).
+
+-spec validate_command(cb_context:context(), path_token(), path_token()) ->
+                              cb_context:context().
+validate_command(Context, Id, Action) ->
+    case cb_context:req_value(Context, <<"participant_id">>) of
+        'undefined' ->
+            cb_context:add_validation_error(<<"participant_id">>, <<"required">>, <<"field is required">>, Context);
+        Participant ->
+            Exec = {action_to_app(Action), Id, wh_util:to_integer(Participant)},
+            crossbar_util:response([<<"muting participant ">>, wh_util:to_binary(Participant)]
+                                   ,cb_context:store('exec', Exec, Context))
+    end.
+
+-spec action_to_app(path_token()) -> ne_binary().
+action_to_app(?MUTE_PATH_TOKEN) ->
+    <<"mute_participant">>;
+action_to_app(?DEAF_PATH_TOKEN) ->
+    <<"deaf_participant">>;
+action_to_app(?UNMUTE_PATH_TOKEN) ->
+    <<"unmute_participant">>;
+action_to_app(?UNDEAF_PATH_TOKEN) ->
+    <<"undeaf_participant">>;
+action_to_app(?KICK_PATH_TOKEN) ->
+    <<"kick">>.
+
+-spec exec_command(cb_context:context()) -> cb_context:context().
+exec_command(Context) ->
+    case cb_context:fetch('exec', Context) of
+        {App, ConfId, Participant} ->
+            lager:debug("exec ~s on ~p", [App, Participant]),
+            Req = [{<<"Conference-ID">>, ConfId}
+                   ,{<<"Application-Name">>, App}
+                   ,{<<"Participant">>, Participant}
+                   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                  ],
+            case whapps_util:amqp_pool_request(Req
+                                               ,fun wapi_conference:publish_command/1
+                                               ,fun wapi_conference:command_resp_v/1
+                                              )
+            of
+                {'ok', RespJObj} ->
+                    crossbar_util:response(wh_json:get_value(<<"Response-Message">>, RespJObj, <<"command executed successfully">>), Context);
+                {'error', ErrJObj} ->
+                    crossbar_util:response(wh_json:get_value(<<"Error-Message">>, ErrJObj, <<"command sent">>), Context)
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions
