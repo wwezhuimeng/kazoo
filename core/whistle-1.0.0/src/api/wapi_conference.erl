@@ -41,6 +41,7 @@
 -export([config_req/1, config_req_v/1
          ,config_resp/1, config_resp_v/1
         ]).
+-export([command_resp/1, command_resp_v/1]).
 
 -export([bind_q/2, unbind_q/2]).
 
@@ -73,10 +74,11 @@
 -export([publish_participant_volume_out/2, publish_participant_volume_out/3]).
 -export([publish_error/2, publish_error/3]).
 -export([publish_participants_event/2, publish_participants_event/3]).
--export([publish_command/2, publish_command/3]).
+-export([publish_command/1, publish_command/2, publish_command/3]).
 -export([publish_targeted_command/2, publish_targeted_command/3]).
 -export([publish_config_req/1, publish_config_req/2
          ,publish_config_resp/2, publish_config_resp/3
+         ,publish_command_resp/2, publish_command_resp/3
         ]).
 
 -include_lib("whistle/include/wh_api.hrl").
@@ -358,6 +360,13 @@
                              ,{<<"Event-Name">>, <<"config_resp">>}
                             ]).
 -define(CONFIG_RESP_TYPES, []).
+
+-define(COMMAND_RESP_HEADERS, [<<"Application-Name">>]).
+-define(OPTIONAL_COMMAND_RESP_HEADERS, [<<"Response-Message">>]).
+-define(COMMAND_RESP_VALUES, [{<<"Event-Category">>, <<"conference">>}
+                              ,{<<"Event-Name">>, <<"command_resp">>}
+                             ]).
+-define(COMMAND_RESP_TYPES, []).
 
 -define(APPLICTION_MAP, [{<<"deaf_participant">>, ?DEAF_PARTICIPANT_VALUES, fun ?MODULE:deaf_participant/1}
                          ,{<<"participant_energy">>, ?PARTICIPANT_ENERGY_VALUES, fun ?MODULE:participant_energy/1}
@@ -947,6 +956,24 @@ config_resp_v(JObj) -> config_resp_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec command_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+command_resp(Prop) when is_list(Prop) ->
+    case command_resp_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?COMMAND_RESP_HEADERS, ?OPTIONAL_COMMAND_RESP_HEADERS);
+        'false' -> {'error', "Proplist failed validation for command resp"}
+    end;
+command_resp(JObj) -> command_resp(wh_json:to_proplist(JObj)).
+
+-spec command_resp_v(api_terms()) -> boolean().
+command_resp_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?COMMAND_RESP_HEADERS, ?COMMAND_RESP_VALUES, ?COMMAND_RESP_TYPES);
+command_resp_v(JObj) -> command_resp_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Bind a queue to the conference exchange
 %% @end
 %%--------------------------------------------------------------------
@@ -1363,8 +1390,11 @@ publish_error(Queue, Req, ContentType) ->
 %% Publish to the conference exchange
 %% @end
 %%--------------------------------------------------------------------
+-spec publish_command(api_terms()) -> 'ok'.
 -spec publish_command(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_command(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_command(API) ->
+    publish_command(conference_id(API), API).
 publish_command(ConferenceId, JObj) ->
     publish_command(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_command(ConferenceId, Req, ContentType) ->
@@ -1423,4 +1453,17 @@ publish_config_resp(Queue, JObj) ->
     publish_config_resp(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_config_resp(Queue, Req, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Req, ?CONFIG_RESP_VALUES, fun ?MODULE:config_resp/1),
+    amqp_util:targeted_publish(Queue, Payload, ContentType).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Publish to the target exchange
+%% @end
+%%--------------------------------------------------------------------
+-spec publish_command_resp(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_command_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_command_resp(Queue, JObj) ->
+    publish_command_resp(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_command_resp(Queue, Req, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?COMMAND_RESP_VALUES, fun ?MODULE:command_resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).

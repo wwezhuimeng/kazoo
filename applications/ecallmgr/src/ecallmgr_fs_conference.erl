@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2012 VoIP INC
+%%% @copyright (C) 2011-2013, 2600Hz
 %%% @doc
 %%% Execute conference commands
 %%% @end
@@ -100,7 +100,7 @@ init([Node, Options]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+    {'reply', 'ok', State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -228,6 +228,7 @@ exec(Focus, ConferenceId, JObj) ->
             lager:debug("api to ~s: conference ~s", [Focus, Command]),
 
             Result = freeswitch:api(Focus, 'conference', Command),
+            lager:debug("result for ~s: ~p", [Command, Result]),
             send_response(App, Result, wh_json:get_value(<<"Server-ID">>, JObj), JObj)
     end.
 
@@ -465,7 +466,7 @@ get_conf_command(Say, _Focus, _ConferenceId, JObj) when Say =:= <<"say">> orelse
 
 get_conf_command(Cmd, _Focus, _ConferenceId, _JObj) ->
     lager:debug("unknown conference command ~s", [Cmd]),
-    {error, list_to_binary([<<"unknown conference command: ">>, Cmd])}.
+    {'error', list_to_binary([<<"unknown conference command: ">>, Cmd])}.
 
 -spec send_response(ne_binary(), tuple(), api_binary(), wh_json:object()) -> 'ok'.
 send_response(<<"stop_play">>, {'ok', Res}, _Queue, Command) ->
@@ -500,18 +501,27 @@ send_response(<<"status">>, {'noop', Conference}, RespQ, Command) ->
             | wh_api:default_headers(?APP_NAME, ?APP_VERSION) ++ wh_json:to_proplist(Conference)
            ],
     wapi_conference:publish_status_resp(RespQ, Resp);
-send_response(_, {'ok', Response}, RespQ, Command) ->
+send_response(App, {'ok', Response}, RespQ, Command) ->
     case binary:match(Response, <<"not found">>) of
-        'nomatch' -> 'ok';
+        'nomatch' ->
+            Resp = [{<<"Application-Name">>, App}
+                    ,{<<"Response-Message">>, binary:replace(Response, <<"\n">>, <<>>)}
+                    ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command)}
+                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                   ],
+            lager:debug("responding for app ~s to ~s: ~s", [App, RespQ, Response]),
+            wapi_conference:publish_command_resp(RespQ, Resp);
         _Else ->
-            Error = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command, <<>>)}
+            lager:debug("sending error for app ~s to ~s: ~s", [App, RespQ, Response]),
+            Error = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command)}
                      ,{<<"Error-Message">>, binary:replace(Response, <<"\n">>, <<>>)}
                      ,{<<"Request">>, Command}
                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                     ],
             wapi_conference:publish_error(RespQ, Error)
     end;
-send_response(_, {'error', Msg}, RespQ, Command) ->
+send_response(_App, {'error', Msg}, RespQ, Command) ->
+    lager:debug("sending app ~s error ~s to ~s", [_App, Msg, RespQ]),
     Error = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command, <<>>)}
              ,{<<"Error-Message">>, binary:replace(wh_util:to_binary(Msg), <<"\n">>, <<>>)}
              ,{<<"Request">>, Command}
@@ -519,6 +529,7 @@ send_response(_, {'error', Msg}, RespQ, Command) ->
             ],
     wapi_conference:publish_error(RespQ, Error);
 send_response(_, 'timeout', RespQ, Command) ->
+    lager:debug("command timed out"),
     Error = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command, <<>>)}
              ,{<<"Error-Message">>, <<"Node Timeout">>}
              ,{<<"Request">>, Command}
