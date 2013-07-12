@@ -21,7 +21,6 @@ fw_conf_event(<<"participant_event">>, JObj) ->
     CleanJObj = clean_event(JObj),
     Event = cleanup_binary(wh_json:get_value(<<"Event">>, JObj)),
     Id = wh_json:get_value(<<"Call-ID">>, JObj),
-    io:format("~p~n~p~n", [JObj, CleanJObj]),
     blackhole_ws:broadcast_event(wh_json:get_value(<<"Conference-ID">>, JObj)
                                  ,Event
                                  ,[Id, CleanJObj]
