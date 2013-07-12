@@ -27,7 +27,7 @@ close(Pid, _SId, _State) ->
     		Info = blackhole_session:session_to_proplist(Session),
     		ConfId = proplists:get_value('conf_id', Info),
     		UserName = proplists:get_value('user_name', Info),
-    		broadcast_event(ConfId, <<"user_disconnected">>, [{<<"user_name">>, UserName}]);
+    		broadcast_event(ConfId, <<"user_disconnected">>, UserName);
     	_ -> 'ok'
     end,
     blackhole_session:remove_session(Pid),
@@ -51,11 +51,11 @@ recv(_Pid, _SId, Message, State) ->
 
 %% Connection Event
 handle_event(<<"connection">>, Data, Pid) ->
-	ConfId = wh_json:get_value(<<"conf_name">>, Data),
+	ConfId = wh_json:get_value(<<"conference_id">>, Data),
 	UserName = wh_json:get_value(<<"user_name">>, Data),
 	blackhole_session:add_session(ConfId, Pid, UserName),
-	socketio_session:send_event(Pid, <<"connected">>, wh_json:from_list([{<<"conf_name">>, ConfId}])),
-	broadcast_event(ConfId, <<"user_connected">>, Data);
+	socketio_session:send_event(Pid, <<"connected">>, [UserName, ConfId]),
+	broadcast_event(ConfId, <<"user_connected">>, UserName);
 %% Unknown Event
 handle_event(Event, Data, Pid) ->
 	io:format("Got unknown event ~p~n", [Event]),

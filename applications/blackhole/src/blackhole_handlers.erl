@@ -11,57 +11,27 @@
 -include("blackhole.hrl").
 
 handle_conference_event(JObj, _Props) ->
-    fw_conf_event(JObj).
+    Event = wh_json:get_value(<<"Event-Name">>, JObj),
+    fw_conf_event(Event, JObj).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-fw_conf_event(JObj) ->
-    EventName = wh_json:get_value(<<"Event-Name">>, JObj),
-    io:format("CONF EVENT: ~p~n", [EventName]),
-    fw_conf_event(EventName, JObj).
-
-fw_conf_event(<<"participants_event">>, JObj) ->
-    Participants = wh_json:get_value(<<"Participants">>, JObj, []),
-    NParticipants = lists:foldl(
-        fun(Participant, Acc) ->
-            Req = [{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, Participant)}
-                   |wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                  ],
-            {'ok', Resp} = whapps_util:amqp_pool_request(Req
-                                                 ,fun wapi_call:publish_call_status_req/1
-                                                 ,fun wapi_call:call_status_resp_v/1
-                                                ),
-            MergedJObjs = clean_event(<<"participants_event">>
-            						  ,wh_json:merge_jobjs(Participant, Resp)
-            						 ),
-            [MergedJObjs|Acc]
-        end
-        ,[]
-        ,Participants
-    ),
+fw_conf_event(<<"participant_event">>, JObj) ->
+    CleanJObj = clean_event(JObj),
+    Event = cleanup_binary(wh_json:get_value(<<"Event">>, JObj)),
+    Id = wh_json:get_value(<<"Channel-Presence-ID">>, JObj),
     blackhole_ws:broadcast_event(wh_json:get_value(<<"Conference-ID">>, JObj)
-                                 ,<<"user_connected">>
-                                 ,NParticipants);
-fw_conf_event('undefined', _JObj) ->
-    lager:error("conf event undefined", []);
-fw_conf_event(_Event, _JObj) ->
-    lager:debug("ignore conf event: ~p", [_Event]).
+                                 ,Event
+                                 ,[Id, CleanJObj]
+                                );
+fw_conf_event(Event, _JObj) ->
+    io:format("receive unknown event: ~p~n", [Event]).
 
-
-
-
-
-
-
-
-
-
-
-clean_event(<<"participants_event">>, JObj) ->
-	RemoveKeys = [<<"App-Name">>
+clean_event(JObj) ->
+	RemoveKeys = [<<"Focus">>
                   ,<<"App-Version">>
-                  ,<<"Call-ID">>
+                  ,<<"App-Name">>
                   ,<<"Event-Category">>
                   ,<<"Event-Name">>
                   ,<<"Msg-ID">>
@@ -70,6 +40,8 @@ clean_event(<<"participants_event">>, JObj) ->
                   ,<<"Switch-Hostname">>
                  ],
     clean_jobj(JObj, RemoveKeys).
+
+
 
 clean_jobj(JObj, RemoveKeys) ->
 	clean_jobj(JObj, RemoveKeys, []).

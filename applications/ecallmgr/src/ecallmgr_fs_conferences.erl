@@ -665,15 +665,32 @@ event(Node, UUID, Props) ->
             %% Apparently not all FS servers issue the "conference-create"
             %% event so lets have a plan-B in place....
             new(Node, Props),
-            update_all(Node, UUID, Props);
-        <<"floor-change">> -> update_all(Node, UUID, Props);
-        <<"start-talking">> -> update_all(Node, UUID, Props);
-        <<"stop-talking">> -> update_all(Node, UUID, Props);
-        <<"mute-member">> -> update_all(Node, UUID, Props);
-        <<"unmute-member">> -> update_all(Node, UUID, Props);
-        <<"deaf-member">> -> update_all(Node, UUID, Props);
-        <<"undeaf-member">> -> update_all(Node, UUID, Props);
-        <<"del-member">> -> participant_destroy(Node, UUID, Props);
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"floor-change">> ->
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"start-talking">> -> 
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"stop-talking">> -> 
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"mute-member">> ->
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"unmute-member">> ->
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"deaf-member">> -> 
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"undeaf-member">> ->
+            update_all(Node, UUID, Props),
+            publish_participant_event(Node, Props);
+        <<"del-member">> ->
+            participant_destroy(Node, UUID, Props),
+            publish_participant_event(Node, Props);
         <<"play-file">> = A -> relay_event(UUID, Node, fix_props(Props, A));
         <<"play-file-done">> = A -> relay_event(UUID, Node, fix_props(Props, A));
         <<"play-file-member">> = A -> relay_event(UUID, Node, fix_props(Props, A));
@@ -1008,3 +1025,29 @@ publish_participant_destroy_event(Node, _UUID, Props) ->
         [] -> destroy(Node, Props);
         _ -> 'ok'
     end.
+
+publish_participant_event(Node, Props) ->
+    ConferenceName = props:get_value(<<"Conference-Name">>, Props),
+    Event = [{<<"Participant">>, props:get_binary_value(<<"Member-ID">>, Props)}
+             ,{<<"Event">>, props:get_binary_value(<<"Action">>, Props)}
+             ,{<<"Focus">>, wh_util:to_binary(Node)}
+             ,{<<"Call-ID">>, props:get_binary_value(<<"Unique-ID">>, Props)}
+             ,{<<"Conference-ID">>, props:get_binary_value(<<"Conference-Name">>, Props)}
+             ,{<<"Floor">>, props:get_binary_value(<<"Floor">>, Props)}
+             ,{<<"Video">>, props:get_binary_value(<<"Video">>, Props)}
+             ,{<<"Hear">>, props:get_binary_value(<<"Hear">>, Props)}
+             ,{<<"Speak">>, props:get_binary_value(<<"Speak">>, Props)}
+             ,{<<"Talking">>, props:get_binary_value(<<"Talking">>, Props)}
+             ,{<<"Current-Energy">>, props:get_binary_value(<<"Current-Energy">>, Props)}
+             ,{<<"Energy-Level">>, props:get_binary_value(<<"Energy-Level">>, Props)}
+             ,{<<"Mute-Detect">>, props:get_binary_value(<<"Mute-Detect">>, Props)}
+             ,{<<"Caller-ID-Name">>, props:get_binary_value(<<"Caller-Caller-ID-Name">>, Props)}
+             ,{<<"Caller-ID-Number">>, props:get_binary_value(<<"Caller-Caller-ID-Number">>, Props)}
+             ,{<<"Channel-Presence-ID">>, props:get_binary_value(<<"Channel-Presence-ID">>, Props)}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    Publisher = fun(P) -> wapi_conference:publish_participant_event(ConferenceName, P) end,
+    wh_amqp_worker:cast(?ECALLMGR_AMQP_POOL
+                        ,Event
+                        ,Publisher
+                       ).

@@ -37,6 +37,7 @@
 -export([participant_volume_in/1, participant_volume_in_v/1]).
 -export([participant_volume_out/1, participant_volume_out_v/1]).
 -export([participants_event/1, participants_event_v/1]).
+-export([participant_event/1, participant_event_v/1]).
 -export([conference_error/1, conference_error_v/1]).
 -export([config_req/1, config_req_v/1
          ,config_resp/1, config_resp_v/1
@@ -74,7 +75,8 @@
 -export([publish_participant_volume_out/2, publish_participant_volume_out/3]).
 -export([publish_error/2, publish_error/3]).
 -export([publish_participants_event/2, publish_participants_event/3]).
--export([publish_command/1, publish_command/2, publish_command/3]).
+-export([publish_participant_event/2, publish_participant_event/3]).
+-export([publish_command/2, publish_command/3]).
 -export([publish_targeted_command/2, publish_targeted_command/3]).
 -export([publish_config_req/1, publish_config_req/2
          ,publish_config_resp/2, publish_config_resp/3
@@ -340,6 +342,21 @@
                                     ,{<<"Event-Name">>, <<"participants_event">>}
                                    ]).
 -define(PARTICIPANTS_EVENT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
+
+%% Conference Participant Event
+-define(PARTICIPANT_EVENT_HEADERS, [<<"Participant">>, <<"Conference-ID">>, <<"Focus">>
+                                    ,<<"Event">>, <<"Call-ID">>
+                                   ]).
+-define(OPTIONAL_PARTICIPANT_EVENT_HEADERS, [<<"Floor">>, <<"Video">>, <<"Hear">>
+                                             ,<<"Speak">>, <<"Talking">>, <<"Current-Energy">>
+                                             ,<<"Current-Energy">>, <<"Energy-Level">>
+                                             ,<<"Mute-Detect">>, <<"Caller-ID-Name">>
+                                             ,<<"Caller-ID-Number">>, <<"Channel-Presence-ID">>
+                                            ]).
+-define(PARTICIPANT_EVENT_VALUES, [{<<"Event-Category">>, <<"conference">>}
+                                    ,{<<"Event-Name">>, <<"participant_event">>}
+                                   ]).
+-define(PARTICIPANT_EVENT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
 %% Conference Error
 -define(CONFERENCE_ERROR_HEADERS, [<<"Error-Message">>, <<"Request">>]).
@@ -907,6 +924,24 @@ participants_event_v(JObj) -> participants_event_v(wh_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec participant_event(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+participant_event(Prop) when is_list(Prop) ->
+    case participant_event_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?PARTICIPANT_EVENT_HEADERS, ?OPTIONAL_PARTICIPANT_EVENT_HEADERS);
+        'false' -> {'error', "Proplist failed validation for participant_event response"}
+    end;
+participant_event(JObj) -> participant_event(wh_json:to_proplist(JObj)).
+
+-spec participant_event_v(api_terms()) -> boolean().
+participant_event_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?PARTICIPANT_EVENT_HEADERS, ?PARTICIPANT_EVENT_VALUES, ?PARTICIPANT_EVENT_TYPES);
+participant_event_v(JObj) -> participant_event_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
 -spec conference_error(api_terms()) -> {'ok', iolist()} | {'error', string()}.
 conference_error(Prop) when is_list(Prop) ->
     case conference_error_v(Prop) of
@@ -1372,6 +1407,19 @@ publish_participants_event(ConferenceId, JObj) ->
     publish_participants_event(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participants_event(ConferenceId, Event, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Event, ?PARTICIPANTS_EVENT_VALUES, fun ?MODULE:participants_event/1),
+    amqp_util:conference_publish(Payload, 'event', ConferenceId, [], ContentType).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Publish to the conference exchange
+%% @end
+%%--------------------------------------------------------------------
+-spec publish_participant_event(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_participant_event(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_participant_event(ConferenceId, JObj) ->
+    publish_participant_event(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_participant_event(ConferenceId, Event, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(Event, ?PARTICIPANT_EVENT_VALUES, fun ?MODULE:participant_event/1),
     amqp_util:conference_publish(Payload, 'event', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
