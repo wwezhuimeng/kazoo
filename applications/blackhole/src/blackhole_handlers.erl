@@ -20,7 +20,8 @@ handle_conference_event(JObj, _Props) ->
 fw_conf_event(<<"participant_event">>, JObj) ->
     CleanJObj = clean_event(JObj),
     Event = cleanup_binary(wh_json:get_value(<<"Event">>, JObj)),
-    Id = wh_json:get_value(<<"Channel-Presence-ID">>, JObj),
+    Id = wh_json:get_value(<<"Call-ID">>, JObj),
+    io:format("~p~n~p~n", [JObj, CleanJObj]),
     blackhole_ws:broadcast_event(wh_json:get_value(<<"Conference-ID">>, JObj)
                                  ,Event
                                  ,[Id, CleanJObj]
@@ -39,12 +40,17 @@ clean_event(JObj) ->
                   ,<<"Server-ID">>
                   ,<<"Switch-Hostname">>
                  ],
-    clean_jobj(JObj, RemoveKeys).
-
-
-
-clean_jobj(JObj, RemoveKeys) ->
-	clean_jobj(JObj, RemoveKeys, []).
+    CleanKeys = [{<<"Mute-Detect">>, <<"mute_detect">>, fun wh_util:to_boolean/1}
+                 ,{<<"Energy-Level">>, <<"energy_level">>, fun wh_util:to_integer/1}
+                 ,{<<"Current-Energy">>, <<"current_energy">>, fun wh_util:to_integer/1}
+                 ,{<<"Talking">>, <<"talking">>, fun wh_util:to_boolean/1}
+                 ,{<<"Speak">>, <<"speak">>, fun wh_util:to_boolean/1}
+                 ,{<<"Hear">>, <<"hear">>, fun wh_util:to_boolean/1}
+                 ,{<<"Video">>, <<"video">>, fun wh_util:to_boolean/1}
+                 ,{<<"Floor">>, <<"floor">>, fun wh_util:to_boolean/1}
+                 ,{<<"Participant">>, <<"participant">>, fun wh_util:to_integer/1}
+                ],
+    clean_jobj(JObj, RemoveKeys, CleanKeys).
 
 
 clean_jobj(JObj, RemoveKeys, []) ->
@@ -56,14 +62,14 @@ clean_jobj(JObj, RemoveKeys, []) ->
     	,wh_json:new()
     	,JObj1
     );
-clean_jobj(JObj, _, [{OldKey, NewKey} | T]) ->
+clean_jobj(JObj, RemoveKeys, [{OldKey, NewKey} | T]) ->
     Value = wh_json:get_value(OldKey, JObj),
     J1 = wh_json:set_value(NewKey, Value, JObj),
-    clean_jobj(wh_json:delete_key(OldKey, J1), T);
-clean_jobj(JObj, _, [{OldKey, NewKey, Fun} | T]) ->
+    clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T);
+clean_jobj(JObj, RemoveKeys, [{OldKey, NewKey, Fun} | T]) ->
     Value = wh_json:get_value(OldKey, JObj),
     J1 = wh_json:set_value(NewKey, Fun(Value), JObj),
-    clean_jobj( wh_json:delete_key(OldKey, J1), T).
+    clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T).
 
 
 cleanup_binary(Binary) ->
