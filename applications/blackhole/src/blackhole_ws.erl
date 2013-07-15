@@ -56,6 +56,12 @@ handle_event(<<"connection">>, Data, Pid) ->
 	blackhole_session:add_session(ConfId, Pid, UserName),
 	socketio_session:send_event(Pid, <<"connected">>, [UserName, ConfId]),
 	broadcast_event(ConfId, <<"user_connected">>, UserName);
+handle_event(<<"disconnection">>, Data, Pid) ->
+	ConfId = wh_json:get_value(<<"conference_id">>, Data),
+	UserName = wh_json:get_value(<<"user_name">>, Data),
+	socketio_session:send_event(Pid, <<"disconnected">>, [UserName, ConfId]),
+	blackhole_session:remove_session(Pid),
+	broadcast_event(ConfId, <<"user_disconnected">>, UserName);
 %% Unknown Event
 handle_event(Event, Data, Pid) ->
 	io:format("Got unknown event ~p~n", [Event]),

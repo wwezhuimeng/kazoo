@@ -66,9 +66,14 @@ clean_jobj(JObj, RemoveKeys, [{OldKey, NewKey} | T]) ->
     J1 = wh_json:set_value(NewKey, Value, JObj),
     clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T);
 clean_jobj(JObj, RemoveKeys, [{OldKey, NewKey, Fun} | T]) ->
-    Value = wh_json:get_value(OldKey, JObj),
-    J1 = wh_json:set_value(NewKey, Fun(Value), JObj),
-    clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T).
+    case wh_json:get_value(OldKey, JObj) of
+        'undefined' ->
+            J1 = wh_json:set_value(NewKey, <<"undefined">>, JObj),
+            clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T);
+        Value ->
+            J1 = wh_json:set_value(NewKey, Fun(Value), JObj),
+            clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T)
+    end.
 
 
 cleanup_binary(Binary) ->
