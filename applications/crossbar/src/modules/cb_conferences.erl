@@ -145,12 +145,12 @@ validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Acti
 
 -spec post(cb_context:context(), path_token()) ->
                   cb_context:context().
--spec post(cb_context:context(), path_token(), path_token(), path_token() | integer()) ->
+-spec post(cb_context:context(), path_token(), path_token(), path_token()) ->
                   cb_context:context().
 post(Context, _) ->
     crossbar_doc:save(Context).
 
-post(Context, _Id, _Action, _PId) ->
+post(Context, _Id, _Action, _CallId) ->
     exec_command(Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
@@ -161,20 +161,20 @@ put(Context) ->
 delete(Context, _) ->
     crossbar_doc:delete(Context).
 
--spec validate_command(cb_context:context(), path_token(), path_token(), path_token() | integer()) ->
+-spec validate_command(cb_context:context(), path_token(), path_token(), path_token()) ->
                               cb_context:context().
-validate_command(Context, Id, Action, PId) ->
-    try wh_util:to_integer(PId) of
-        Participant ->
-            Exec = {action_to_app(Action), Id, wh_util:to_integer(Participant)},
-            crossbar_util:response([<<"muting participant ">>, wh_util:to_binary(Participant)]
-                                   ,cb_context:store('exec', Exec, Context))
-    catch
-        _E:_R ->
-            lager:debug("failed to convert participant ~p to int ~s: ~p", [PId, _E, _R]),
-            cb_context:add_validation_error(<<"participant_id">>, <<"type">>, <<"field must be an integer">>, Context)
+validate_command(Context, Id, Action, CallId) ->
+    Context1 = cb_context:load(Context, Id),
+    case cb_context:resp_status(Context1) of
+        'success' ->
+            Exec = {action_to_app(Action), Id, CallId},
+            crossbar_util:response([Action, " caller ", CallId]
+                                   ,cb_context:store('exec', Exec, Context1)
+                                  );
+        _ ->
+            lager:debug("failed to find conference definition ~s", [Id]),
+            cb_context:add_validation_error(<<"conference_id">>, <<"required">>, <<"not found">>, Context)
     end.
-
 
 -spec action_to_app(path_token()) -> ne_binary().
 action_to_app(?MUTE_PATH_TOKEN) ->
@@ -191,11 +191,11 @@ action_to_app(?KICK_PATH_TOKEN) ->
 -spec exec_command(cb_context:context()) -> cb_context:context().
 exec_command(Context) ->
     case cb_context:fetch('exec', Context) of
-        {App, ConfId, Participant} ->
-            lager:debug("exec ~s on ~p", [App, Participant]),
+        {App, ConfId, CallId} ->
+            lager:debug("exec ~s on ~s in ~s", [App, CallId, ConfId]),
             Req = [{<<"Conference-ID">>, ConfId}
                    ,{<<"Application-Name">>, App}
-                   ,{<<"Participant">>, Participant}
+                   ,{<<"Call-ID">>, CallId}
                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                   ],
             case whapps_util:amqp_pool_request(Req
