@@ -22,6 +22,7 @@
          ,xml_list_to_records/2
          ,fetch/1, fetch_full/1
          ,find_participant_by_callid/2
+         ,find_callid_by_participant_id/2
          ,flush_node/1
          ,sync_conferences/1
          ,relay_event/1
@@ -210,7 +211,16 @@ find_participant_by_callid(ConfId, CallId) ->
                       ,member_id=P
                      }] -> P;
         _ -> 'undefined'
-    end.    
+    end.
+
+-spec find_callid_by_participant_id(ne_binary(), ne_binary()) -> api_integer().
+find_callid_by_participant_id(ConfId, ParticipantId) ->
+    case ets:match_object(?CONFERENCES_TBL, #participant{conference_name=ConfId
+                                                         ,member_id=ParticipantId
+                                                        }) of
+        [#participant{uuid=CallId}] -> CallId;
+        _ -> 'undefined'
+    end.
 
 -spec fetch_full(ne_binary()) ->
                         {'ok', wh_json:object()} |
@@ -621,8 +631,8 @@ record_to_json(#conference{uuid=UUID
          ,{<<"Conference-ID">>, Name}
          ,{<<"Participant-Count">>, Participants}
          ,{<<"Profile">>, Profile}
-         ,{<<"Participant-With-Floor">>, WithFloor}
-         ,{<<"Particiapnt-Lost-Floor">>, LostFloor}
+         ,{<<"Participant-With-Floor">>, find_callid_by_participant_id(Name, WithFloor)}
+         ,{<<"Particiapnt-Lost-Floor">>, find_callid_by_participant_id(Name, LostFloor)}
          ,{<<"Running">>, Running}
          ,{<<"Answered">>, Answered}
          ,{<<"Dynamic">>, Dynamic}

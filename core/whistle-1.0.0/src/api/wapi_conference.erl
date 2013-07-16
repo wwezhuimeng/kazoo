@@ -244,9 +244,10 @@
 -define(RECORDSTOP_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
 %% Conference Relate Participants
--define(RELATE_PARTICIPANTS_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Other-Participant">>]).
+-define(RELATE_PARTICIPANTS_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
 -define(OPTIONAL_RELATE_PARTICIPANTS_HEADERS, [<<"Relationship">>
                                                ,<<"Call-ID">>, <<"Participant">>
+                                               ,<<"Other-Call-ID">>, <<"Other-Participant">>
                                               ]).
 -define(RELATE_PARTICIPANTS_VALUES, [{<<"Event-Category">>, <<"conference">>}
                                      ,{<<"Event-Name">>, <<"command">>}

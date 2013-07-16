@@ -222,14 +222,19 @@ exec(Focus, ConferenceId, JObj) ->
                 end,
             send_response(App, Result, wh_json:get_value(<<"Server-ID">>, JObj), JObj);
         {AppName, AppData} ->
-            Command = wh_util:to_list(list_to_binary([ConferenceId, " ", AppName, " ", AppData])),
-            Focus =/= 'undefined' andalso lager:debug("execute on node ~s: conference ~s", [Focus, Command]),
+            try wh_util:to_list(list_to_binary([ConferenceId, " ", AppName, " ", AppData])) of
+                Command ->
+                    Focus =/= 'undefined' andalso lager:debug("execute on node ~s: conference ~s", [Focus, Command]),
 
-            lager:debug("api to ~s: conference ~s", [Focus, Command]),
+                    lager:debug("api to ~s: conference ~s", [Focus, Command]),
 
-            Result = freeswitch:api(Focus, 'conference', Command),
-            lager:debug("result for ~s: ~p", [Command, Result]),
-            send_response(App, Result, wh_json:get_value(<<"Server-ID">>, JObj), JObj)
+                    Result = freeswitch:api(Focus, 'conference', Command),
+                    lager:debug("result for ~s: ~p", [Command, Result]),
+                    send_response(App, Result, wh_json:get_value(<<"Server-ID">>, JObj), JObj)
+            catch
+                'error':'badarg' ->
+                    send_response(App, {'error', <<"failed to create command: badarg">>}, wh_json:get_value(<<"Server-ID">>, JObj), JObj)
+            end
     end.
 
 -spec get_conf_command(ne_binary(), atom(), ne_binary(), wh_json:object()) ->
@@ -249,7 +254,7 @@ get_conf_command(<<"participant_energy">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference participant_energy failed to execute as JObj did not validate.">>};
         'true' ->
-            Args = list_to_binary([wh_json:get_binary_value(<<"Participant">>, JObj)
+            Args = list_to_binary([find_participant_id(JObj)
                                    ," ", wh_json:get_binary_value(<<"Energy-Level">>, JObj, <<"20">>)
                                   ]),
             {<<"energy">>, Args}
@@ -260,7 +265,7 @@ get_conf_command(<<"kick">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference kick failed to execute as JObj did not validate.">>};
         'true' ->
-            {<<"hup">>, wh_json:get_binary_value(<<"Participant">>, JObj, <<"last">>)}
+            {<<"hup">>, find_participant_id(JObj, <<"last">>)}
     end;
 get_conf_command(<<"participants">>, 'undefined', ConferenceId, _) ->
     {'error', <<"Non-Existant ID ", ConferenceId/binary>>};
@@ -311,7 +316,7 @@ get_conf_command(<<"mute_participant">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference mute_participant failed to execute as JObj did not validate.">>};
         'true' ->
-            {<<"mute">>, wh_json:get_binary_value(<<"Participant">>, JObj, <<"last">>)}
+            {<<"mute">>, find_participant_id(JObj, <<"last">>)}
     end;
 
 get_conf_command(<<"play">>, _Focus, ConferenceId, JObj) ->
@@ -321,7 +326,7 @@ get_conf_command(<<"play">>, _Focus, ConferenceId, JObj) ->
         'true' ->
             UUID = wh_json:get_ne_value(<<"Call-ID">>, JObj, ConferenceId),
             Media = list_to_binary(["'", ecallmgr_util:media_path(wh_json:get_value(<<"Media-Name">>, JObj), UUID, JObj), "'"]),
-            Args = case wh_json:get_binary_value(<<"Participant">>, JObj) of
+            Args = case find_participant_id(JObj) of
                        'undefined' -> Media;
                        Participant -> list_to_binary([Media, " ", Participant])
                    end,
@@ -351,8 +356,8 @@ get_conf_command(<<"relate_participants">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference relate_participants failed to execute as JObj did not validate.">>};
         'true' ->
-            Args = list_to_binary([wh_json:get_binary_value(<<"Participant">>, JObj)
-                                   ," ", wh_json:get_binary_value(<<"Other-Participant">>, JObj)
+            Args = list_to_binary([find_participant_id(JObj)
+                                   ," ", find_other_participant_id(JObj)
                                    ," ", relationship(wh_json:get_binary_value(<<"Relationship">>, JObj))
                                   ]),
             {<<"relate">>, Args}
@@ -375,8 +380,8 @@ get_conf_command(<<"stop_play">>, _Focus, _ConferenceId, JObj) ->
             {'error', <<"conference stop_play failed to execute as JObj did not validate.">>};
         'true' ->
             Affects = wh_json:get_binary_value(<<"Affects">>, JObj, <<"all">>),
-            Args = case wh_json:get_binary_value(<<"Participant">>, JObj) of
-                       undefined -> Affects;
+            Args = case find_participant_id(JObj) of
+                       'undefined' -> Affects;
                        Participant -> list_to_binary([Affects, " ", Participant])
                    end,
             {<<"stop">>, Args}
@@ -387,7 +392,7 @@ get_conf_command(<<"undeaf_participant">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference undeaf_participant failed to execute as JObj did not validate.">>};
         'true' ->
-            {<<"undeaf">>, wh_json:get_binary_value(<<"Participant">>, JObj)}
+            {<<"undeaf">>, find_participant_id(JObj)}
     end;
 
 get_conf_command(<<"unlock">>, _Focus, _ConferenceId, JObj) ->
@@ -403,7 +408,7 @@ get_conf_command(<<"unmute_participant">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference unmute failed to execute as JObj did not validate.">>};
         'true' ->
-            {<<"unmute">>, wh_json:get_binary_value(<<"Participant">>, JObj)}
+            {<<"unmute">>, find_participant_id(JObj)}
     end;
 
 get_conf_command(<<"participant_volume_in">>, _Focus, _ConferenceId, JObj) ->
@@ -411,7 +416,7 @@ get_conf_command(<<"participant_volume_in">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference participant_volume_in failed to execute as JObj did not validate.">>};
         'true' ->
-            Args = list_to_binary([wh_json:get_binary_value(<<"Participant">>, JObj)
+            Args = list_to_binary([find_participant_id(JObj)
                                    ," ", wh_json:get_binary_value(<<"Volume-In-Level">>, JObj, <<"0">>)
                                   ]),
             {<<"volume_in">>, Args}
@@ -422,7 +427,7 @@ get_conf_command(<<"participant_volume_out">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference participant_volume_out failed to execute as JObj did not validate.">>};
         'true' ->
-            Args = list_to_binary([wh_json:get_binary_value(<<"Participant">>, JObj)
+            Args = list_to_binary([find_participant_id(JObj)
                                    ," ", wh_json:get_binary_value(<<"Volume-Out-Level">>, JObj, <<"0">>)
                                   ]),
             {<<"volume_out">>, Args}
@@ -458,7 +463,7 @@ get_conf_command(Say, _Focus, _ConferenceId, JObj) when Say =:= <<"say">> orelse
         'true'->
             SayMe = wh_json:get_value(<<"Text">>, JObj),
 
-            case wh_json:get_binary_value(<<"Participant">>, JObj) of
+            case find_participant_id(JObj) of
                 'undefined' -> {<<"say">>, ["'", SayMe, "'"]};
                 Id -> {<<"saymember">>, [Id, " '", SayMe, "'"]}
             end
@@ -542,18 +547,34 @@ relationship(<<"deaf">>) -> <<"nohear">>;
 relationship(_) -> <<"clear">>.
 
 -spec find_participant_id(wh_json:object()) -> api_binary().
+-spec find_participant_id(wh_json:object(), Default) -> ne_binary() | Default.
 find_participant_id(JObj) ->
     case wh_json:get_binary_value(<<"Participant">>, JObj) of
-        'undefined' -> find_participant_id(wh_json:get_value(<<"Conference-ID">>, JObj)
-                                           ,wh_json:get_value(<<"Call-ID">>, JObj)
-                                          );
+        'undefined' -> find_participant_id_by_callid(wh_json:get_value(<<"Conference-ID">>, JObj)
+                                                     ,wh_json:get_value(<<"Call-ID">>, JObj)
+                                                    );
         Participant -> wh_util:to_binary(Participant)
     end.
 
--spec find_participant_id(ne_binary(), api_binary()) -> api_binary().
-find_participant_id(_, 'undefined') -> 'undefined';
-find_participant_id(ConfId, CallId) -> 
+find_participant_id(JObj, Default) ->
+    case find_participant_id(JObj) of
+        'undefined' -> Default;
+        Id -> Id
+    end.
+
+-spec find_participant_id_by_callid(ne_binary(), api_binary()) -> api_binary().
+find_participant_id_by_callid(_, 'undefined') -> 'undefined';
+find_participant_id_by_callid(ConfId, CallId) -> 
     case ecallmgr_fs_conferences:find_participant_by_callid(ConfId, CallId) of
         'undefined' -> 'undefined';
         Participant -> wh_util:to_binary(Participant)
+    end.
+
+-spec find_other_participant_id(wh_json:object()) -> api_binary().
+find_other_participant_id(JObj) ->
+    case wh_json:get_value(<<"Other-Participant">>, JObj) of
+        'undefined' -> find_participant_id_by_callid(wh_json:get_value(<<"Conference-ID">>, JObj)
+                                                     ,wh_json:get_value(<<"Other-Call-ID">>, JObj)
+                                                    );
+        Participant -> Participant
     end.
