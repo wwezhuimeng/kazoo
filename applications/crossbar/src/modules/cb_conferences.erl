@@ -21,6 +21,8 @@
          ,delete/2
         ]).
 
+-export([get_pins/2]).
+
 -include("../crossbar.hrl").
 
 -define(CB_LIST, <<"conferences/crossbar_listing">>).
@@ -31,6 +33,12 @@
 -define(DEAF_PATH_TOKEN, <<"deaf">>).
 -define(UNDEAF_PATH_TOKEN, <<"undeaf">>).
 -define(KICK_PATH_TOKEN, <<"kick">>).
+
+-define(CONF_PIN_LIST, <<"conferences/listing_by_pin">>).
+-define(CONF_PIN_DOC, <<"conferences_pins">>).
+-define(CONF_PIN_NUMBER, 500).
+-define(CONF_PIN_NUMBER_MAX, 500).
+
 
 %%%===================================================================
 %%% API
@@ -198,8 +206,9 @@ exec_command(Context) ->
                    ,{<<"Call-ID">>, CallId}
                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                   ],
+            PublishFun = fun(P) -> wapi_conference:publish_command(ConfId, P) end,
             case whapps_util:amqp_pool_request(Req
-                                               ,fun wapi_conference:publish_command/1
+                                               ,PublishFun
                                                ,fun wapi_conference:command_resp_v/1
                                               )
             of
@@ -296,7 +305,7 @@ update_conference(DocId, #cb_context{}=Context) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% 
+%%
 %% @end
 %%--------------------------------------------------------------------
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
@@ -323,3 +332,126 @@ normalize_users_results(JObj, Acc, UserId) ->
         UserId -> normalize_view_results(JObj, Acc);
         _ -> ['undefined'|Acc]
     end.
+
+
+get_pins(AcctDb, N) ->
+    Number = max_pin(N),
+    case couch_mgr:open_doc(AcctDb, ?CONF_PIN_DOC) of
+        {'ok', JObj} ->
+            Pins = wh_json:get_value(<<"pins">>, JObj),
+            maybe_generate_pins(AcctDb, Pins, Number);
+        {'error', 'not_found'} ->
+            lager:info("missing doc ~p in ~p creating...", [?CONF_PIN_DOC, AcctDb]),
+            case create_conferences_pins_doc(AcctDb) of
+                'ok' -> get_pins(AcctDb, Number);
+                'error' -> []
+            end;
+        {'error', _E} ->
+            lager:error("failed to open ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
+            []
+    end.
+
+maybe_generate_pins(AcctDb, Pins, Number) ->
+    try lists:split(Number, Pins) of
+        {L1, L2} ->
+            NPins = generate_pins(AcctDb, Number, L2),
+            case update_conferences_pins_doc(AcctDb, NPins) of
+                'ok' -> L1;
+                'error' -> get_pins(AcctDb, Number)
+            end
+    catch
+        _E:'badarg' ->
+            lager:error("failed to select ~p pins in ~p, creating new pins...", [Number, AcctDb]),
+            NPins = generate_pins(AcctDb, (Number-erlang:length(Pins)), Pins),
+            update_conferences_pins_doc(AcctDb, NPins),
+            get_pins(AcctDb, Number);
+        _E:_R ->
+            lager:error("failed to select ~p pins in ~p, reason: ~p", [Number, AcctDb, _R]),
+            []
+    end.
+
+
+create_conferences_pins_doc(AcctDb) ->
+    Doc  = wh_json:set_values([{<<"_id">>, ?CONF_PIN_DOC}
+                               ,{<<"pins">>, generate_pins(AcctDb, ?CONF_PIN_NUMBER)}
+                              ]
+                              ,wh_json:new()),
+    case couch_mgr:save_doc(AcctDb, Doc) of
+        {'ok', _} ->
+            lager:info("~p created in ~p", [?CONF_PIN_DOC, AcctDb]);
+        {'error', _E} ->
+            lager:error("failed to create ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
+            'error'
+    end.
+
+update_conferences_pins_doc(AcctDb, Pins) ->
+    UpdateProps = [{<<"pins">>, Pins}],
+    case couch_mgr:update_doc(AcctDb, ?CONF_PIN_DOC, UpdateProps) of
+        {'ok', _} ->
+            lager:debug("~p updated in ~p", [?CONF_PIN_DOC, AcctDb]);
+        {'error', _E} ->
+            lager:error("failed to update ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
+            'error'
+    end.
+
+
+generate_pins(AcctDb, Number) ->
+    generate_pins(AcctDb, Number, []).
+
+
+generate_pins(AcctDb, 0, Acc) ->
+    pin_is_unique(AcctDb, Acc);
+generate_pins(AcctDb, Number, Acc) ->
+    Pin = get_timestamp(),
+    case lists:member(Pin, Acc) of
+        'false' ->
+            generate_pins(AcctDb, Number-1, [Pin|Acc]);
+        'true' ->
+            generate_pins(AcctDb, Number, [Acc])
+    end.
+
+max_pin(Number) ->
+    case Number > ?CONF_PIN_NUMBER_MAX of
+        'true' ->
+            lager:error("max pin limit reached, request: ~p (max: ~p)", [Number, ?CONF_PIN_NUMBER_MAX]),
+            ?CONF_PIN_NUMBER_MAX;
+        'false' -> Number
+    end.
+
+pin_is_unique(AcctDb, Pins) ->
+    ViewPins = get_pin_from_view(AcctDb),
+    {Miss, NPins} = lists:foldl(fun(Pin, {Missing, Acc}) ->
+                    case lists:member(Pin, ViewPins) of
+                        'false' ->
+                            {Missing, [Pin|Acc]};
+                        'true' ->
+                            {Missing+1, Acc}
+                    end
+                end
+                ,{0, []}
+                ,Pins
+                ),
+    case Miss of
+        0 -> NPins;
+        N ->
+            lists:merge(generate_pins(AcctDb, N), NPins)
+    end.
+
+get_pin_from_view(AcctDb) ->
+    case couch_mgr:get_all_results(AcctDb, ?CONF_PIN_LIST) of
+        {'ok', JObjs} ->
+            couch_mgr:get_result_keys(JObjs);
+        {'error', _E} ->
+            lager:error("failed to check view ~p in ~p, reason: ~p", [?CONF_PIN_LIST, AcctDb, _E]),
+            'false'
+    end.
+
+get_timestamp() ->
+    {_Macro, _Sec, Micro} = erlang:now(),
+    Micro.
+
+
+
+
+
+

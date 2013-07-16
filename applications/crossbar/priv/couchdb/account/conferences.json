@@ -7,6 +7,9 @@
         },
         "listing_by_name": {
             "map": "function(doc) { if (doc.pvt_type != 'conference' || doc.pvt_deleted) return; emit(doc.name, null);}"
+        },
+        "listing_by_pin": {
+            "map": "function(doc) { if (doc.pvt_type != 'conference' || doc.pvt_deleted) return; if(doc.participants){ for(p in doc.participants){ emit(doc.participants[p].pin, null); }} if(doc.pins){ for(p in doc.pins){ emit(doc.pins[p], null); }}}"
         }
     }
     ,"filters": {
