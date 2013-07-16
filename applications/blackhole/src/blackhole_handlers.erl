@@ -18,17 +18,24 @@ handle_conference_event(JObj, _Props) ->
 %%% Internal functions
 %%%===================================================================
 fw_conf_event(<<"participant_event">>, JObj) ->
-    CleanJObj = clean_event(JObj),
+    CleanJObj = clean_participant_event(JObj),
     Event = cleanup_binary(wh_json:get_value(<<"Event">>, JObj)),
     Id = wh_json:get_value(<<"Call-ID">>, JObj),
     blackhole_ws:broadcast_event(wh_json:get_value(<<"Conference-ID">>, JObj)
                                  ,Event
                                  ,[Id, CleanJObj]
                                 );
+fw_conf_event(<<"conference_event">>, JObj) ->
+    ConfId = wh_json:get_value(<<"Conference-ID">>, JObj),
+    Event = cleanup_binary(wh_json:get_value(<<"Event">>, JObj)),
+    blackhole_ws:broadcast_event(ConfId
+                                 ,Event
+                                 ,[ConfId]
+                                );
 fw_conf_event(Event, _JObj) ->
     io:format("receive unknown event: ~p~n", [Event]).
 
-clean_event(JObj) ->
+clean_participant_event(JObj) ->
 	RemoveKeys = [<<"Focus">>
                   ,<<"App-Version">>
                   ,<<"App-Name">>
@@ -47,7 +54,7 @@ clean_event(JObj) ->
                  ,{<<"Hear">>, <<"hear">>, fun wh_util:to_boolean/1}
                  ,{<<"Video">>, <<"video">>, fun wh_util:to_boolean/1}
                  ,{<<"Floor">>, <<"floor">>, fun wh_util:to_boolean/1}
-                 ,{<<"Participant">>, <<"participant">>, fun wh_util:to_integer/1}
+                 ,{<<"Event">>, <<"event">>, fun cleanup_binary/1}
                 ],
     clean_jobj(JObj, RemoveKeys, CleanKeys).
 

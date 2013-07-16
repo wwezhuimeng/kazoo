@@ -29,7 +29,9 @@
                    ,{'conference', []}
                   ]).
 -define(RESPONDERS, [{{'blackhole_handlers', 'handle_conference_event'}
-                      ,[{<<"conference">>, <<"participant_event">>}]
+                      ,[{<<"conference">>, <<"participant_event">>}
+                        ,{<<"conference">>, <<"conference_event">>}
+                       ]
                      }
                     ]).
 -define(QUEUE_NAME, <<>>).

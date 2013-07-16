@@ -648,14 +648,17 @@ add_participants_to_conference_json(ConfId, ConfJObj) ->
 
 event(Node, 'undefined', Props) ->
     case props:get_value(<<"Action">>, Props) of
-        <<"conference-create">> -> new(Node, Props);
+        <<"conference-create">> ->
+            publish_conference_event(Node, Props),
+            new(Node, Props);
         <<"play-file">> = A -> relay_event(fix_props(Props, A));
         <<"play-file-done">> = A -> relay_event(fix_props(Props, A));
         <<"start-recording">> = A -> relay_event(fix_props(Props, A));
         <<"stop-recording">> = A -> relay_event(fix_props(Props, A));
         <<"floor-change">> -> update_conference(Node, Props);
-        <<"conference-destroy">> -> destroy(Node, Props);
-
+        <<"conference-destroy">> ->
+            publish_conference_event(Node, Props),
+            destroy(Node, Props);
         _Action -> lager:debug("unknown action with no uuid: ~s", [_Action])
     end;
 event(Node, [UUID], Props) -> event(Node, UUID, Props);
@@ -670,10 +673,10 @@ event(Node, UUID, Props) ->
         <<"floor-change">> ->
             update_all(Node, UUID, Props),
             publish_participant_event(Node, Props);
-        <<"start-talking">> -> 
+        <<"start-talking">> ->
             update_all(Node, UUID, Props),
             publish_participant_event(Node, Props);
-        <<"stop-talking">> -> 
+        <<"stop-talking">> ->
             update_all(Node, UUID, Props),
             publish_participant_event(Node, Props);
         <<"mute-member">> ->
@@ -682,7 +685,7 @@ event(Node, UUID, Props) ->
         <<"unmute-member">> ->
             update_all(Node, UUID, Props),
             publish_participant_event(Node, Props);
-        <<"deaf-member">> -> 
+        <<"deaf-member">> ->
             update_all(Node, UUID, Props),
             publish_participant_event(Node, Props);
         <<"undeaf-member">> ->
@@ -1051,3 +1054,23 @@ publish_participant_event(Node, Props) ->
                         ,Event
                         ,Publisher
                        ).
+
+publish_conference_event(Node, Props) ->
+    ConferenceName = props:get_value(<<"Conference-Name">>, Props),
+    Event = [{<<"Event">>, props:get_binary_value(<<"Action">>, Props)}
+             ,{<<"Focus">>, wh_util:to_binary(Node)}
+             ,{<<"Conference-ID">>, props:get_binary_value(<<"Conference-Name">>, Props)}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    Publisher = fun(P) -> wapi_conference:publish_conference_event(ConferenceName, P) end,
+    wh_amqp_worker:cast(?ECALLMGR_AMQP_POOL
+                        ,Event
+                        ,Publisher
+                       ).
+
+
+
+
+
+
+
