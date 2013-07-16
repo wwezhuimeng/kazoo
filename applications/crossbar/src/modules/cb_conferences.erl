@@ -164,7 +164,7 @@ delete(Context, _) ->
 -spec validate_command(cb_context:context(), path_token(), path_token(), path_token()) ->
                               cb_context:context().
 validate_command(Context, Id, Action, CallId) ->
-    Context1 = cb_context:load(Context, Id),
+    Context1 = crossbar_doc:load(Id, Context),
     case cb_context:resp_status(Context1) of
         'success' ->
             Exec = {action_to_app(Action), Id, CallId},
@@ -206,7 +206,7 @@ exec_command(Context) ->
                 {'ok', RespJObj} ->
                     crossbar_util:response(wh_json:get_value(<<"Response-Message">>, RespJObj, <<"command executed successfully">>), Context);
                 {'error', ErrJObj} ->
-                    crossbar_util:response(wh_json:get_value(<<"Error-Message">>, ErrJObj, <<"command sent">>), Context)
+                    crossbar_util:response('error', wh_json:get_value(<<"Error-Message">>, ErrJObj), Context)
             end
     end.
 
@@ -257,6 +257,13 @@ load_conference(DocId, Context) ->
     crossbar_doc:load(DocId, Context).
 
 load_conference_status(ConfId, Context) ->
+    Context1 = crossbar_doc:load(ConfId, Context),
+    case cb_context:resp_status(Context1) of
+        'success' -> lookup_status(ConfId, Context1);
+        _ -> Context1
+    end.
+
+lookup_status(ConfId, Context) ->
     case whapps_util:amqp_pool_request([{<<"Conference-ID">>, ConfId}
                                         ,{<<"List-Participants">>, cb_context:req_value(Context, <<"list_participants">>, 'true')}
                                         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -271,7 +278,7 @@ load_conference_status(ConfId, Context) ->
                                     );
         {'error', _E} ->
             lager:debug("error getting participants: ~p", [_E]),
-            crossbar_util:response('error', <<"No conference data found">>, 500, [], Context)
+            crossbar_util:response('error', <<"No conference data found">>, 404, [], Context)
     end.
 
 %%--------------------------------------------------------------------
