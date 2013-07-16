@@ -241,7 +241,7 @@ get_conf_command(<<"deaf_participant">>, _Focus, _ConferenceId, JObj) ->
         'false' ->
             {'error', <<"conference deaf_participant failed to execute as JObj did not validate.">>};
         'true' ->
-            {<<"deaf">>, wh_json:get_binary_value(<<"Participant">>, JObj)}
+            {<<"deaf">>, find_participant_id(JObj)}
     end;
 
 get_conf_command(<<"participant_energy">>, _Focus, _ConferenceId, JObj) ->
@@ -540,3 +540,20 @@ send_response(_, 'timeout', RespQ, Command) ->
 relationship(<<"mute">>) -> <<"nospeak">>;
 relationship(<<"deaf">>) -> <<"nohear">>;
 relationship(_) -> <<"clear">>.
+
+-spec find_participant_id(wh_json:object()) -> api_binary().
+find_participant_id(JObj) ->
+    case wh_json:get_binary_value(<<"Participant">>, JObj) of
+        'undefined' -> find_participant_id(wh_json:get_value(<<"Conference-ID">>, JObj)
+                                           ,wh_json:get_value(<<"Call-ID">>, JObj)
+                                          );
+        Participant -> wh_util:to_binary(Participant)
+    end.
+
+-spec find_participant_id(ne_binary(), api_binary()) -> api_binary().
+find_participant_id(_, 'undefined') -> 'undefined';
+find_participant_id(ConfId, CallId) -> 
+    case ecallmgr_fs_conferences:find_participant_by_callid(ConfId, CallId) of
+        'undefined' -> 'undefined';
+        Participant -> wh_util:to_binary(Participant)
+    end.

@@ -21,6 +21,7 @@
          ,size/1, set_size/2
          ,xml_list_to_records/2
          ,fetch/1, fetch_full/1
+         ,find_participant_by_callid/2
          ,flush_node/1
          ,sync_conferences/1
          ,relay_event/1
@@ -201,6 +202,15 @@ fetch(ConfId) ->
         [Conf] -> {'ok', record_to_json(Conf)};
         _Else -> {'error', 'not_found'}
     end.
+
+-spec find_participant_by_callid(ne_binary(), ne_binary()) -> api_integer().
+find_participant_by_callid(ConfId, CallId) ->
+    case ets:lookup(?CONFERENCES_TBL, CallId) of
+        [#participant{conference_name=ConfId
+                      ,member_id=P
+                     }] -> P;
+        _ -> 'undefined'
+    end.    
 
 -spec fetch_full(ne_binary()) ->
                         {'ok', wh_json:object()} |
