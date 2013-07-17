@@ -8,6 +8,7 @@
 
 -module(blackhole_ws).
 
+-include("blackhole.hrl").
 
 -export([open/3
 		 ,recv/4
