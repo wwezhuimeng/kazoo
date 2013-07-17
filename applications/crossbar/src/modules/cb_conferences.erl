@@ -21,12 +21,11 @@
          ,delete/2
         ]).
 
--export([get_pins/2]).
-
 -include("../crossbar.hrl").
 
 -define(CB_LIST, <<"conferences/crossbar_listing">>).
 -define(STATUS_PATH_TOKEN, <<"status">>).
+-define(PINS_PATH_TOKEN, <<"pins">>).
 
 -define(MUTE_PATH_TOKEN, <<"mute">>).
 -define(UNMUTE_PATH_TOKEN, <<"unmute">>).
@@ -130,6 +129,9 @@ validate(#cb_context{req_verb = ?HTTP_GET}=Context) ->
 validate(#cb_context{req_verb = ?HTTP_PUT}=Context) ->
     create_conference(Context).
 
+
+validate(#cb_context{req_verb = ?HTTP_GET}=Context, ?PINS_PATH_TOKEN) ->
+    load_pins(Context);
 validate(#cb_context{req_verb = ?HTTP_GET}=Context, Id) ->
     load_conference(Id, Context);
 validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id) ->
@@ -272,6 +274,17 @@ load_conference_status(ConfId, Context) ->
         _ -> Context1
     end.
 
+load_pins(#cb_context{db_name=AccDb}=Context) ->
+    case get_pins(AccDb, 10) of
+        [] ->
+            lager:error("error getting pins", []),
+            crossbar_util:response('error', <<"pins could not be generated">>, 500, [], Context);
+        Pins ->
+            cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
+                                     ,Pins
+                                    )
+    end.
+
 lookup_status(ConfId, Context) ->
     case whapps_util:amqp_pool_request([{<<"Conference-ID">>, ConfId}
                                         ,{<<"List-Participants">>, cb_context:req_value(Context, <<"list_participants">>, 'true')}
@@ -334,6 +347,13 @@ normalize_users_results(JObj, Acc, UserId) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec get_pins(ne_binary(), integer()) -> [ne_binary(), ...] | [].
 get_pins(AcctDb, N) ->
     Number = max_pin(N),
     case couch_mgr:open_doc(AcctDb, ?CONF_PIN_DOC) of
@@ -351,6 +371,13 @@ get_pins(AcctDb, N) ->
             []
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_generate_pins(ne_binary(), [ne_binary(), ...], integer()) -> [ne_binary(), ...].
 maybe_generate_pins(AcctDb, Pins, Number) ->
     try lists:split(Number, Pins) of
         {L1, L2} ->
@@ -370,7 +397,13 @@ maybe_generate_pins(AcctDb, Pins, Number) ->
             []
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 
+%% @end
+%%--------------------------------------------------------------------
+-spec create_conferences_pins_doc(ne_binary()) -> 'ok' | 'error'.
 create_conferences_pins_doc(AcctDb) ->
     Doc  = wh_json:set_values([{<<"_id">>, ?CONF_PIN_DOC}
                                ,{<<"pins">>, generate_pins(AcctDb, ?CONF_PIN_NUMBER)}
@@ -384,6 +417,13 @@ create_conferences_pins_doc(AcctDb) ->
             'error'
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec update_conferences_pins_doc(ne_binary(), [ne_binary(), ...]) -> 'ok' | 'error'.
 update_conferences_pins_doc(AcctDb, Pins) ->
     UpdateProps = [{<<"pins">>, Pins}],
     case couch_mgr:update_doc(AcctDb, ?CONF_PIN_DOC, UpdateProps) of
@@ -395,6 +435,15 @@ update_conferences_pins_doc(AcctDb, Pins) ->
     end.
 
 
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_pins(ne_binary(), integer()) -> [ne_binary(), ...].
+-spec generate_pins(ne_binary(), integer(), [ne_binary(), ...]) -> [ne_binary(), ...].
 generate_pins(AcctDb, Number) ->
     generate_pins(AcctDb, Number, []).
 
@@ -402,7 +451,7 @@ generate_pins(AcctDb, Number) ->
 generate_pins(AcctDb, 0, Acc) ->
     pin_is_unique(AcctDb, Acc);
 generate_pins(AcctDb, Number, Acc) ->
-    Pin = get_timestamp(),
+    Pin = create_pin(),
     case lists:member(Pin, Acc) of
         'false' ->
             generate_pins(AcctDb, Number-1, [Pin|Acc]);
@@ -410,6 +459,13 @@ generate_pins(AcctDb, Number, Acc) ->
             generate_pins(AcctDb, Number, [Acc])
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec max_pin(integer()) -> integer().
 max_pin(Number) ->
     case Number > ?CONF_PIN_NUMBER_MAX of
         'true' ->
@@ -418,6 +474,13 @@ max_pin(Number) ->
         'false' -> Number
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec pin_is_unique(ne_binary(), integer()) -> [ne_binary(), ...].
 pin_is_unique(AcctDb, Pins) ->
     ViewPins = get_pin_from_view(AcctDb),
     {Miss, NPins} = lists:foldl(fun(Pin, {Missing, Acc}) ->
@@ -437,6 +500,13 @@ pin_is_unique(AcctDb, Pins) ->
             lists:merge(generate_pins(AcctDb, N), NPins)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec get_pin_from_view(ne_binary()) -> [ne_binary(), ...] | 'false'.
 get_pin_from_view(AcctDb) ->
     case couch_mgr:get_all_results(AcctDb, ?CONF_PIN_LIST) of
         {'ok', JObjs} ->
@@ -446,11 +516,22 @@ get_pin_from_view(AcctDb) ->
             'false'
     end.
 
-get_timestamp() ->
-    {_Macro, _Sec, Micro} = erlang:now(),
-    Micro.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 
-
+%% @end
+%%--------------------------------------------------------------------
+-spec create_pin() -> ne_binary().
+create_pin() ->
+    Pin =  wh_util:to_binary(random:uniform(999999)),
+    Length = erlang:length(erlang:binary_to_list(Pin)),
+    case  Length < 6 of
+        'true' ->
+            Prefix = binary:copy(<<"0">>, 6-Length),
+            <<Prefix/binary, Pin/binary>>;
+        'false' -> Pin
+    end.
 
 
 
