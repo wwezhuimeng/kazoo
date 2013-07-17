@@ -33,7 +33,7 @@ fw_conf_event(<<"conference_event">>, JObj) ->
                                  ,[ConfId]
                                 );
 fw_conf_event(Event, _JObj) ->
-    io:format("receive unknown event: ~p~n", [Event]).
+    lager:debug("receive unknown event: ~p~n", [Event]).
 
 clean_participant_event(JObj) ->
 	RemoveKeys = [<<"Focus">>

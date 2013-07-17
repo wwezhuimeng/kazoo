@@ -16,12 +16,12 @@
 
 -export([broadcast_event/3]).
 
-open(Pid, _SId, _Opts) ->
-    io:format("open ~p~n", [Pid]),
+open(_Pid, _SId, _Opts) ->
+    lager:debug("opening socket ~p", [_SId]),
     {'ok', []}.
 
 close(Pid, _SId, _State) ->
-    io:format("close ~p~n", [Pid]),
+    lager:debug("closing socket ~p", [_SId]),
     case blackhole_session:get_session_from_pid(Pid) of
     	[Session|_] ->
     		Info = blackhole_session:session_to_proplist(Session),
@@ -36,17 +36,15 @@ close(Pid, _SId, _State) ->
 
 %% Msg
 recv(_Pid, _SId, {message, <<>>, Message}, State) ->
-	io:format("recv msg ~p~n", [Message]),
-    %%socketio_session:send_obj(Pid, Json),
+	lager:debug("receive message ~p on socket ~p", [Message, _SId]),
     {'ok', State};
 %% Custom Events
 recv(Pid, _SId, {event, <<>>, Event, Message}, State) ->
-    io:format("recv event ~p ~p~n", [Event, Message]),
    	handle_event(Event, Message, Pid),
     {'ok', State};
 %% Catch all
 recv(_Pid, _SId, Message, State) ->
-    io:format("recv unknow message ~p~n", [Message]),
+    lager:info("receive unknown message ~p on socket ~p", [Message, _SId]),
     {'ok', State}.
 
 %% Connection Event
@@ -76,7 +74,7 @@ handle_event(<<"connection_status">>, _Data, Pid) ->
     end;
 %% Unknown Event
 handle_event(Event, Data, Pid) ->
-	io:format("Got unknown event ~p~n", [Event]),
+	lager:info("receive unknown event ~p", [Event]),
 	Unknown = [{<<"event">>, Event}
 			   ,{<<"data">>, Data}
 			  ],
