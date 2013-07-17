@@ -1,0 +1,23 @@
+{
+   "_id": "conferences_servers",
+   "$schema": "http://json-schema.org/draft-03/schema#",
+   "id": "http://json-schema.org/draft-03/schema#",
+   "description": "Schema for conferences servers",
+   "properties": {
+      "numbers": {
+         "name": "numbers",
+         "description": "Defines numbers",
+         "type": "object",
+         "properties": {},
+         "default": {}
+      },
+      "name": {
+         "name": "Name",
+         "description": "A friendly name for the conference server",
+         "required": "true",
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 128
+      }
+   }
+}
