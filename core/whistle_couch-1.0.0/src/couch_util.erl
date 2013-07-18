@@ -568,14 +568,30 @@ do_stream_attachment(#db{}=Db, DocId, AName, Caller) ->
                                {'ok', wh_json:object()} |
                                couchbeam_error().
 do_put_attachment(#db{}=Db, DocId, AName, Contents, Options) ->
-    ?RETRY_504(couchbeam:put_attachment(Db, DocId, AName, Contents, Options)).
+    case ?RETRY_504(couchbeam:put_attachment(Db, DocId, AName, Contents, Options)) of
+        {'ok', JObj}=Ok ->
+            _ = case couch_mgr:change_notice() of
+                    'true' -> spawn(fun() -> publish_doc(Db, JObj) end);
+                    'false' -> 'ok'
+                end,
+            Ok;
+        Else -> Else
+    end.
 
 -spec do_del_attachment(couchbeam_db(), ne_binary(), ne_binary(), wh_proplist()) ->
                                {'ok', wh_json:object()} |
                                couchbeam_error().
 do_del_attachment(#db{}=Db, DocId, AName, Options) ->
     Doc = wh_util:to_binary(http_uri:encode(wh_util:to_list(DocId))),
-    ?RETRY_504(couchbeam:delete_attachment(Db, Doc, AName, Options)).
+    case ?RETRY_504(couchbeam:delete_attachment(Db, Doc, AName, Options)) of
+        {'ok', JObj}=Ok ->
+            _ = case couch_mgr:change_notice() of
+                    'true' -> spawn(fun() -> publish_doc(Db, JObj) end);
+                    'false' -> 'ok'
+                end,
+            Ok;
+        Else -> Else
+    end.
 
 %% Helpers for getting Couchbeam records ---------------------------------------
 

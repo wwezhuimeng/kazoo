@@ -248,7 +248,6 @@ normalize_view_results(JObj, Acc) ->
 track_assignment(#cb_context{doc=JObj, storage=Storage}=Context) ->
     OldNums = get_numbers(props:get_value('db_doc', Storage)),
     NewNums = get_numbers(JObj),
-    io:format("Old:~p~n New:~p~n", [OldNums, NewNums]),
     Assigned = lists:foldl(
         fun(Num, Acc) ->
             case lists:member(Num, OldNums) of
