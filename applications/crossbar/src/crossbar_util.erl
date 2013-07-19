@@ -330,6 +330,7 @@ response_auth(JObj) ->
     AccountId = wh_json:get_value(<<"account_id">>, JObj, 'undefined'),
     OwnerId = wh_json:get_value(<<"owner_id">>, JObj, 'undefined'),
     ConfId = wh_json:get_value(<<"conference_id">>, JObj, 'undefined'),
+    IsModerator = wh_json:get_value(<<"is_moderator">>, JObj, 'undefined'),
     IsReseller = wh_services:is_reseller(AccountId),
     ResellerId = wh_services:find_reseller_id(AccountId),
     wh_json:from_list(
@@ -339,6 +340,7 @@ response_auth(JObj) ->
              ,{<<"is_reseller">>, IsReseller}
              ,{<<"reseller_id">>, ResellerId}
              ,{<<"conference_id">>, ConfId}
+             ,{<<"is_moderator">>, IsModerator}
             ]
         )
     ).

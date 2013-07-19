@@ -28,7 +28,6 @@
 -include("../crossbar.hrl").
 
 -define(PIN_VIEW, <<"conferences/listing_by_pin">>).
--define(ACC_ID, <<"d75380836f90be08ea51db1ce8dc5891">>).
 
 %%%===================================================================
 %%% pin
@@ -90,7 +89,7 @@ authenticate(_) -> 'false'.
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(#cb_context{req_verb = ?HTTP_PUT}=Context) ->
-    cb_context:validate_request_data(<<"pin_auth">>, Context, fun on_successful_validation/1).
+    cb_context:validate_request_data(<<"pin_auth">>, Context, fun maybe_validate/1).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -114,39 +113,69 @@ put(Context) ->
 %% Failure here returns 401
 %% @end
 %%--------------------------------------------------------------------
--spec on_successful_validation(cb_context:context()) -> cb_context:context().
-on_successful_validation(#cb_context{doc=JObj}=Context) ->
+-spec maybe_validate(cb_context:context()) -> cb_context:context().
+maybe_validate(#cb_context{doc=JObj}=Context) ->
+    AccountId = whapps_config:get(<<"crossbar.pin_auth">>, <<"account_id">>, <<>>),
     Pin = wh_json:get_value(<<"pin">>, JObj),
-    AccDb = wh_util:format_account_id(?ACC_ID, 'encoded'),
+    AccDb = wh_util:format_account_id(AccountId, 'encoded'),
     case wh_json:is_empty(Pin)
         orelse couch_mgr:get_all_results(AccDb, ?PIN_VIEW) of
         'true' -> cb_context:add_system_error('invalid_credentials', Context);
         {'ok', JObjs} ->
-            ConfId = lists:foldl(fun(J, Acc) ->
-                                    case wh_json:get_value(<<"key">>, J) =:= Pin of
-                                        'true' ->
-                                            wh_json:get_value(<<"id">>, J);
-                                        'false' ->
-                                            Acc
-                                    end
-                                 end
-                                 ,'undefined'
-                                 ,JObjs
-                                ),
-            case ConfId of
-                'undefined' ->
-                    cb_context:add_system_error('invalid_credentials', Context);
-                Id ->
-                    AccountId = wh_util:format_account_id(AccDb, 'raw'),
-                    Context#cb_context{resp_status='success'
-                                       ,db_name=AccDb
-                                       ,doc=wh_json:set_values([{<<"account_id">>, AccountId}
-                                                                ,{<<"conference_id">>, Id}
-                                                               ], JObj)}
-            end;
+                ConfId = lists:foldl(fun(J, Acc) ->
+                            case wh_json:get_value(<<"key">>, J) =:= Pin of
+                                'true' ->
+                                    wh_json:get_value(<<"id">>, J);
+                                'false' ->
+                                    Acc
+                            end
+                         end
+                         ,'undefined'
+                         ,JObjs
+                        ),
+                case ConfId of
+                    'undefined' ->
+                        cb_context:add_system_error('invalid_credentials', Context);
+                    Id ->
+                        on_successful_validation(Context#cb_context{account_id=AccountId, db_name=AccDb}, Id)
+                end;
         {'error', _E} ->
             lager:error("failed to check view ~p in ~p, reason: ~p", [?PIN_VIEW, AccDb, _E]),
             cb_context:add_system_error('datastore_unreachable', Context)
+    end.
+
+
+-spec on_successful_validation(cb_context:context(), ne_binary() ) -> cb_context:context().
+on_successful_validation(#cb_context{doc=JObj, account_id=AccountId}=Context, ConfId) ->
+    Context#cb_context{resp_status='success'
+                       ,doc=wh_json:set_values([{<<"account_id">>, AccountId}
+                                                ,{<<"conference_id">>, ConfId}
+                                                ,{<<"is_moderator">>, is_moderator(Context, ConfId)}
+                                               ], JObj)}.
+
+
+is_moderator(#cb_context{doc=JObj, db_name=AccountDb}, ConfId) ->
+    Pin = wh_json:get_value(<<"pin">>, JObj),
+    case couch_mgr:open_doc(AccountDb, ConfId) of
+        {'ok', Conf} ->
+            ModPin = wh_json:get_value([<<"pins">>, <<"moderator">>], Conf),
+            case  ModPin =:= Pin of
+                'true' -> 'true';
+                'false' ->
+                    lists:foldl(fun(Participant, Acc) ->
+                                    case wh_json:get_value(<<"pin">>, Participant) =:= Pin of
+                                        'true' ->
+                                            wh_json:get_value(<<"moderator">>, Participant, 'false');
+                                        'false' -> Acc
+                                    end
+                                end
+                                ,'false'
+                                ,wh_json:get_value(<<"participants">>, Conf)
+                               )
+            end;
+        {'error', _E} ->
+            lager:error("failed to open conference ~p in ~p, reason: ~p", [ConfId, AccountDb, _E]),
+            'false'
     end.
 
 
