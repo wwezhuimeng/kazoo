@@ -37,6 +37,8 @@
 -define(MUTE_CONF_PATH_TOKEN, <<"mute">>).
 -define(RECORD_CONF_PATH_TOKEN, <<"record">>).
 -define(HANGUP_CONF_PATH_TOKEN, <<"hangup">>).
+-define(ADD_PARTICIPANT_PATH_TOKEN, <<"add_participant">>).
+
 
 -define(CONF_PIN_LIST, <<"conferences/listing_by_pin">>).
 -define(CONF_PIN_DOC, <<"conferences_pins">>).
@@ -87,6 +89,8 @@ allowed_methods(_, ?MUTE_CONF_PATH_TOKEN) ->
 allowed_methods(_, ?RECORD_CONF_PATH_TOKEN) ->
     [?HTTP_POST];
 allowed_methods(_, ?HANGUP_CONF_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?ADD_PARTICIPANT_PATH_TOKEN) ->
     [?HTTP_POST].
 
 allowed_methods(_, ?MUTE_PATH_TOKEN, _) ->
@@ -121,7 +125,8 @@ resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
 resource_exists(_, ?LOCK_CONF_PATH_TOKEN) -> 'true';
 resource_exists(_, ?MUTE_CONF_PATH_TOKEN) -> 'true';
 resource_exists(_, ?RECORD_CONF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?HANGUP_CONF_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?HANGUP_CONF_PATH_TOKEN) -> 'true';
+resource_exists(_, ?ADD_PARTICIPANT_PATH_TOKEN) -> 'true'.
 
 resource_exists(_, ?MUTE_PATH_TOKEN, _) -> 'true';
 resource_exists(_, ?DEAF_PATH_TOKEN, _) -> 'true';
@@ -165,6 +170,8 @@ validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_CONF_PATH_TOKEN) 
 validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?RECORD_CONF_PATH_TOKEN) ->
     load_conference(Id, Context);
 validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?HANGUP_CONF_PATH_TOKEN) ->
+    load_conference(Id, Context);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?ADD_PARTICIPANT_PATH_TOKEN) ->
     load_conference(Id, Context).
 
 
@@ -188,8 +195,14 @@ validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Acti
 post(Context, _) ->
     crossbar_doc:save(Context).
 
-post(#cb_context{doc=Doc}=Context, _, Action) ->
-    Set = not(wh_json:get_value(Action, Doc, 'false')),
+
+post(#cb_context{doc=Doc, req_data=Data, db_name=AccDb}=Context, _, ?ADD_PARTICIPANT_PATH_TOKEN) ->
+    Participants = wh_json:get_value(<<"participants">>, Doc),
+    [Pin] = get_pins(AccDb, 1),
+    Participant =  wh_json:set_value(<<"pin">>, Pin, Data),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"participants">>, [Participant|Participants], Doc)});
+post(#cb_context{doc=Doc, req_data=Data}=Context, _, Action) ->
+    Set = wh_json:get_value(<<"state">>, Data, 'false'),
     crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action, Set, Doc)}).
 
 post(Context, _Id, _Action, _CallId) ->
