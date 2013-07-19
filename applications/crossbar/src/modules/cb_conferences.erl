@@ -17,7 +17,7 @@
          ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
          ,validate/1, validate/2, validate/3, validate/4
          ,put/1
-         ,post/2, post/4
+         ,post/2, post/3, post/4
          ,delete/2
         ]).
 
@@ -32,6 +32,11 @@
 -define(DEAF_PATH_TOKEN, <<"deaf">>).
 -define(UNDEAF_PATH_TOKEN, <<"undeaf">>).
 -define(KICK_PATH_TOKEN, <<"kick">>).
+
+-define(LOCK_CONF_PATH_TOKEN, <<"lock">>).
+-define(MUTE_CONF_PATH_TOKEN, <<"mute">>).
+-define(RECORD_CONF_PATH_TOKEN, <<"record">>).
+-define(HANGUP_CONF_PATH_TOKEN, <<"hangup">>).
 
 -define(CONF_PIN_LIST, <<"conferences/listing_by_pin">>).
 -define(CONF_PIN_DOC, <<"conferences_pins">>).
@@ -74,7 +79,15 @@ allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
 allowed_methods(_, ?STATUS_PATH_TOKEN) ->
-    [?HTTP_GET].
+    [?HTTP_GET];
+allowed_methods(_, ?LOCK_CONF_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?MUTE_CONF_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?RECORD_CONF_PATH_TOKEN) ->
+    [?HTTP_POST];
+allowed_methods(_, ?HANGUP_CONF_PATH_TOKEN) ->
+    [?HTTP_POST].
 
 allowed_methods(_, ?MUTE_PATH_TOKEN, _) ->
     [?HTTP_POST];
@@ -104,7 +117,11 @@ allowed_methods(_, ?KICK_PATH_TOKEN, _) ->
                              'true'.
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
-resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
+resource_exists(_, ?LOCK_CONF_PATH_TOKEN) -> 'true';
+resource_exists(_, ?MUTE_CONF_PATH_TOKEN) -> 'true';
+resource_exists(_, ?RECORD_CONF_PATH_TOKEN) -> 'true';
+resource_exists(_, ?HANGUP_CONF_PATH_TOKEN) -> 'true'.
 
 resource_exists(_, ?MUTE_PATH_TOKEN, _) -> 'true';
 resource_exists(_, ?DEAF_PATH_TOKEN, _) -> 'true';
@@ -140,7 +157,16 @@ validate(#cb_context{req_verb = ?HTTP_DELETE}=Context, Id) ->
     load_conference(Id, Context).
 
 validate(#cb_context{req_verb = ?HTTP_GET}=Context, Id, ?STATUS_PATH_TOKEN) ->
-    load_conference_status(Id, Context).
+    load_conference_status(Id, Context);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?LOCK_CONF_PATH_TOKEN) ->
+    load_conference(Id, Context);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_CONF_PATH_TOKEN) ->
+    load_conference(Id, Context);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?RECORD_CONF_PATH_TOKEN) ->
+    load_conference(Id, Context);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?HANGUP_CONF_PATH_TOKEN) ->
+    load_conference(Id, Context).
+
 
 validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_PATH_TOKEN = Action, PId) ->
     validate_command(Context, Id, Action, PId);
@@ -155,10 +181,16 @@ validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Acti
 
 -spec post(cb_context:context(), path_token()) ->
                   cb_context:context().
+-spec post(cb_context:context(), path_token(), path_token()) ->
+                  cb_context:context().
 -spec post(cb_context:context(), path_token(), path_token(), path_token()) ->
                   cb_context:context().
 post(Context, _) ->
     crossbar_doc:save(Context).
+
+post(#cb_context{doc=Doc}=Context, _, Action) ->
+    Set = not(wh_json:get_value(Action, Doc, 'false')),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action, Set, Doc)}).
 
 post(Context, _Id, _Action, _CallId) ->
     exec_command(Context).
