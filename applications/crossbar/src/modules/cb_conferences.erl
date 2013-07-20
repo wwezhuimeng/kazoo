@@ -201,9 +201,10 @@ post(#cb_context{doc=Doc, req_data=Data, db_name=AccDb}=Context, _, ?ADD_PARTICI
     [Pin] = get_pins(AccDb, 1),
     Participant =  wh_json:set_value(<<"pin">>, Pin, Data),
     crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"participants">>, [Participant|Participants], Doc)});
-post(#cb_context{doc=Doc, req_data=Data}=Context, _, Action) ->
-    Set = wh_json:get_value(<<"state">>, Data, 'false'),
-    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action, Set, Doc)}).
+post(#cb_context{doc=Doc, req_data=Data}=Context, Id, Action) ->
+    State = wh_json:get_value(<<"state">>, Data, 'false'),
+    maybe_publish_conference_event(Id, Action, wh_util:to_binary(State)),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action, State, Doc)}).
 
 post(Context, _Id, _Action, _CallId) ->
     exec_command(Context).
@@ -230,6 +231,28 @@ validate_command(Context, Id, Action, CallId) ->
             lager:debug("failed to find conference definition ~s", [Id]),
             cb_context:add_validation_error(<<"conference_id">>, <<"required">>, <<"not found">>, Context)
     end.
+-spec maybe_publish_conference_event(ne_binary(), ne_binary(), ne_binary()) -> pid().
+maybe_publish_conference_event(ConferenceName, Action, State) ->
+    spawn(fun() ->
+            Supported = [?RECORD_CONF_PATH_TOKEN, ?LOCK_CONF_PATH_TOKEN],
+            case lists:member(Action, Supported) of
+                'true' ->
+                    publish_conference_event(ConferenceName
+                                             ,<<Action/binary, "_", State/binary>>
+                                            );
+                'false' -> ok
+            end
+          end).
+
+-spec publish_conference_event(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+publish_conference_event(ConferenceName, Action) ->
+    Event = [{<<"Event">>, Action}
+             ,{<<"Focus">>, wh_util:to_binary(erlang:node())}
+             ,{<<"Conference-ID">>, ConferenceName}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    Publisher = fun(P) -> wapi_conference:publish_conference_event(ConferenceName, P) end,
+    whapps_util:amqp_pool_send(Event ,Publisher).
 
 -spec action_to_app(path_token()) -> ne_binary().
 action_to_app(?MUTE_PATH_TOKEN) ->
