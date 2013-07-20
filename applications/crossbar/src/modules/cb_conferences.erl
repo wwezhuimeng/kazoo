@@ -200,7 +200,8 @@ post(#cb_context{doc=Doc, req_data=Data, db_name=AccDb}=Context, _, ?ADD_PARTICI
     Participants = wh_json:get_value(<<"participants">>, Doc),
     [Pin] = get_pins(AccDb, 1),
     Participant =  wh_json:set_value(<<"pin">>, Pin, Data),
-    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"participants">>, [Participant|Participants], Doc)});
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"participants">>, [Participant|Participants], Doc)}),
+    Context#cb_context{resp_data=Participant};
 post(#cb_context{doc=Doc, req_data=Data}=Context, Id, Action) ->
     State = wh_json:get_value(<<"state">>, Data, 'false'),
     maybe_publish_conference_event(Id, Action, wh_util:to_binary(State)),
