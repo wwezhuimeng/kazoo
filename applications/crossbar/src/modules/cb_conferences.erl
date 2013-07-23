@@ -42,7 +42,6 @@
 -define(HANGUP_CONF, <<"hangup">>).
 -define(ADD_PARTICIPANT, <<"add_participant">>).
 
-
 -define(CONF_PIN_LIST, <<"conferences/listing_by_pin">>).
 -define(CONF_PIN_DOC, <<"conferences_pins">>).
 -define(CONF_PIN_NUMBER, 500).
@@ -206,17 +205,36 @@ post(#cb_context{doc=Doc, req_data=Data, db_name=AccDb}=Context, _, ?ADD_PARTICI
     Participant =  wh_json:set_value(<<"pin">>, Pin, Data),
     crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"participants">>, [Participant|Participants], Doc)}),
     Context#cb_context{resp_data=Participant};
-post(#cb_context{doc=Doc, req_data=Data}=Context, Id, Action) ->
-    States = [{?LOCK_CONF, {'true', ?LOCK_CONF}}
-              ,{?UNLOCK_CONF, {'false', ?LOCK_CONF}}
-              ,{?MUTE_CONF, {'true', ?MUTE_CONF}}
-              ,{?UNMUTE_CONF, {'false', ?MUTE_CONF}}
-              ,{?START_RECORD_CONF, {'true', <<"record">>}}
-              ,{?STOP_RECORD_CONF, {'false', <<"record">>}}
-             ],
-    {State, Action1} = props:get_value(Action, States),
-    maybe_publish_conference_event(Id, Action),
-    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action1, State, Doc)}).
+post(#cb_context{doc=Doc}=Context, Id, ?LOCK_CONF) ->
+    publish_conference_event(Id, ?LOCK_CONF),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(?LOCK_CONF, 'true', Doc)});
+post(#cb_context{doc=Doc}=Context, Id, ?UNLOCK_CONF) ->
+    publish_conference_event(Id, ?UNLOCK_CONF),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(?LOCK_CONF, 'false', Doc)});
+post(#cb_context{doc=Doc}=Context, Id, ?MUTE_CONF) ->
+    case exec_command(Id, <<"mute_participant">>) of
+        {'ok', _} ->
+            crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(?MUTE_CONF, 'true', Doc)});
+        {'error', Error} ->
+            lager:error("error while sending command ~p, ~p", [<<"mute_participant">>, Error]),
+            crossbar_util:response('error', <<"command_failed">>, 500, Error, Context)
+    end;
+post(#cb_context{doc=Doc}=Context, Id, ?UNMUTE_CONF) ->
+    case exec_command(Id, <<"unmute_participant">>) of
+        {'ok', _} ->
+            crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(?MUTE_CONF, 'false', Doc)});
+        {'error', Error} ->
+            lager:error("error while sending command ~p, ~p", [<<"unmute_participant">>, Error]),
+            crossbar_util:response('error', <<"command_failed">>, 500,  Error, Context)
+    end;
+post(#cb_context{doc=Doc}=Context, Id, ?START_RECORD_CONF) ->
+    publish_conference_event(Id, ?START_RECORD_CONF),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"record">>, 'true', Doc)});
+post(#cb_context{doc=Doc}=Context, Id, ?STOP_RECORD_CONF) ->
+    publish_conference_event(Id, ?STOP_RECORD_CONF),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"record">>, 'false', Doc)});
+post(Context, _Id, _) ->
+    Context.
 
 post(Context, _Id, _Action, _CallId) ->
     exec_command(Context).
@@ -228,6 +246,10 @@ put(Context) ->
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, _) ->
     crossbar_doc:delete(Context).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 -spec validate_command(cb_context:context(), path_token(), path_token(), path_token()) ->
                               cb_context:context().
@@ -243,28 +265,6 @@ validate_command(Context, Id, Action, CallId) ->
             lager:debug("failed to find conference definition ~s", [Id]),
             cb_context:add_validation_error(<<"conference_id">>, <<"required">>, <<"not found">>, Context)
     end.
--spec maybe_publish_conference_event(ne_binary(), ne_binary()) -> pid().
-maybe_publish_conference_event(ConferenceName, Action) ->
-    spawn(fun() ->
-            Supported = [?START_RECORD_CONF, ?STOP_RECORD_CONF
-                         ,?LOCK_CONF, ?UNLOCK_CONF
-                        ],
-            case lists:member(Action, Supported) of
-                'true' ->
-                    publish_conference_event(ConferenceName, Action);
-                'false' -> 'ok'
-            end
-          end).
-
--spec publish_conference_event(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
-publish_conference_event(ConferenceName, Action) ->
-    Event = [{<<"Event">>, Action}
-             ,{<<"Focus">>, wh_util:to_binary(erlang:node())}
-             ,{<<"Conference-ID">>, ConferenceName}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ],
-    Publisher = fun(P) -> wapi_conference:publish_conference_event(ConferenceName, P) end,
-    whapps_util:amqp_pool_send(Event ,Publisher).
 
 -spec action_to_app(path_token()) -> ne_binary().
 action_to_app(?MUTE_PATH_TOKEN) ->
@@ -301,9 +301,36 @@ exec_command(Context) ->
             end
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+-spec exec_command(ne_binary(), ne_binary()) -> {'ok', any()} | {'error', any()}.
+-spec exec_command(ne_binary(), ne_binary(), ne_binary()) -> {'ok', any()} | {'error', any()}.
+exec_command(Id, Action) ->
+    exec_command(Id, Action, <<"non_moderator">>).
+exec_command(Id, Action, Participant) ->
+    Req = [{<<"Conference-ID">>, Id}
+           ,{<<"Application-Name">>, Action}
+           ,{<<"Participant">>, Participant}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    PublishFun = fun(P) -> wapi_conference:publish_command(Id, P) end,
+    whapps_util:amqp_pool_request(Req
+                                  ,PublishFun
+                                  ,fun wapi_conference:command_resp_v/1
+                                 ).
+
+
+-spec publish_conference_event(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+publish_conference_event(ConferenceName, Action) ->
+    spawn(fun() ->
+            Event = [{<<"Event">>, Action}
+                     ,{<<"Focus">>, wh_util:to_binary(erlang:node())}
+                     ,{<<"Conference-ID">>, ConferenceName}
+                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    ],
+            Publisher = fun(P) -> wapi_conference:publish_conference_event(ConferenceName, P) end,
+            whapps_util:amqp_pool_send(Event ,Publisher)
+          end).
+
+
 
 %%--------------------------------------------------------------------
 %% @private
