@@ -18,12 +18,6 @@
             "required":"true",
             "type":"integer"
         },
-        "start": {
-            "name":"record",
-            "description":"Record the conference",
-            "type":"boolean",
-            "default": "false"
-        },
         "participants": {
             "description":"Defines the discovery properties for a member",
             "type":"array",
@@ -41,14 +35,17 @@
         },
         "pins": {
             "description":"Defines the pins for the conference",
-            "type":"array",
-            "items": [
-                {
-                    "moderator":"string",
-                    "member":"string"
+            "type":"object",
+            "properties": {
+                "moderator": {
+                    "description":"Define moderator's pin",
+                    "type":"string"
+                },
+                "member": {
+                    "description":"Define member's pin",
+                    "type":"string"
                 }
-            ],
-            "default": []
+            }
         },
         "require_moderator": {
             "name":"Required Moderator",
