@@ -33,11 +33,14 @@
 -define(UNDEAF_PATH_TOKEN, <<"undeaf">>).
 -define(KICK_PATH_TOKEN, <<"kick">>).
 
--define(LOCK_CONF_PATH_TOKEN, <<"lock">>).
--define(MUTE_CONF_PATH_TOKEN, <<"mute">>).
--define(RECORD_CONF_PATH_TOKEN, <<"record">>).
--define(HANGUP_CONF_PATH_TOKEN, <<"hangup">>).
--define(ADD_PARTICIPANT_PATH_TOKEN, <<"add_participant">>).
+-define(LOCK_CONF, <<"lock">>).
+-define(UNLOCK_CONF, <<"unlock">>).
+-define(MUTE_CONF, <<"mute">>).
+-define(UNMUTE_CONF, <<"unmute">>).
+-define(START_RECORD_CONF, <<"start_record">>).
+-define(STOP_RECORD_CONF, <<"stop_record">>).
+-define(HANGUP_CONF, <<"hangup">>).
+-define(ADD_PARTICIPANT, <<"add_participant">>).
 
 
 -define(CONF_PIN_LIST, <<"conferences/listing_by_pin">>).
@@ -82,15 +85,21 @@ allowed_methods(_) ->
 
 allowed_methods(_, ?STATUS_PATH_TOKEN) ->
     [?HTTP_GET];
-allowed_methods(_, ?LOCK_CONF_PATH_TOKEN) ->
+allowed_methods(_, ?LOCK_CONF) ->
     [?HTTP_POST];
-allowed_methods(_, ?MUTE_CONF_PATH_TOKEN) ->
+allowed_methods(_, ?UNLOCK_CONF) ->
     [?HTTP_POST];
-allowed_methods(_, ?RECORD_CONF_PATH_TOKEN) ->
+allowed_methods(_, ?MUTE_CONF) ->
     [?HTTP_POST];
-allowed_methods(_, ?HANGUP_CONF_PATH_TOKEN) ->
+allowed_methods(_, ?UNMUTE_CONF) ->
     [?HTTP_POST];
-allowed_methods(_, ?ADD_PARTICIPANT_PATH_TOKEN) ->
+allowed_methods(_, ?START_RECORD_CONF) ->
+    [?HTTP_POST];
+allowed_methods(_, ?STOP_RECORD_CONF) ->
+    [?HTTP_POST];
+allowed_methods(_, ?HANGUP_CONF) ->
+    [?HTTP_POST];
+allowed_methods(_, ?ADD_PARTICIPANT) ->
     [?HTTP_POST].
 
 allowed_methods(_, ?MUTE_PATH_TOKEN, _) ->
@@ -122,11 +131,14 @@ allowed_methods(_, ?KICK_PATH_TOKEN, _) ->
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
 resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
-resource_exists(_, ?LOCK_CONF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?MUTE_CONF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?RECORD_CONF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?HANGUP_CONF_PATH_TOKEN) -> 'true';
-resource_exists(_, ?ADD_PARTICIPANT_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?LOCK_CONF) -> 'true';
+resource_exists(_, ?UNLOCK_CONF) -> 'true';
+resource_exists(_, ?MUTE_CONF) -> 'true';
+resource_exists(_, ?UNMUTE_CONF) -> 'true';
+resource_exists(_, ?START_RECORD_CONF) -> 'true';
+resource_exists(_, ?STOP_RECORD_CONF) -> 'true';
+resource_exists(_, ?HANGUP_CONF) -> 'true';
+resource_exists(_, ?ADD_PARTICIPANT) -> 'true'.
 
 resource_exists(_, ?MUTE_PATH_TOKEN, _) -> 'true';
 resource_exists(_, ?DEAF_PATH_TOKEN, _) -> 'true';
@@ -163,15 +175,7 @@ validate(#cb_context{req_verb = ?HTTP_DELETE}=Context, Id) ->
 
 validate(#cb_context{req_verb = ?HTTP_GET}=Context, Id, ?STATUS_PATH_TOKEN) ->
     load_conference_status(Id, Context);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?LOCK_CONF_PATH_TOKEN) ->
-    load_conference(Id, Context);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_CONF_PATH_TOKEN) ->
-    load_conference(Id, Context);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?RECORD_CONF_PATH_TOKEN) ->
-    load_conference(Id, Context);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?HANGUP_CONF_PATH_TOKEN) ->
-    load_conference(Id, Context);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?ADD_PARTICIPANT_PATH_TOKEN) ->
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, _) ->
     load_conference(Id, Context).
 
 
@@ -196,16 +200,23 @@ post(Context, _) ->
     crossbar_doc:save(Context).
 
 
-post(#cb_context{doc=Doc, req_data=Data, db_name=AccDb}=Context, _, ?ADD_PARTICIPANT_PATH_TOKEN) ->
+post(#cb_context{doc=Doc, req_data=Data, db_name=AccDb}=Context, _, ?ADD_PARTICIPANT) ->
     Participants = wh_json:get_value(<<"participants">>, Doc),
     [Pin] = get_pins(AccDb, 1),
     Participant =  wh_json:set_value(<<"pin">>, Pin, Data),
     crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(<<"participants">>, [Participant|Participants], Doc)}),
     Context#cb_context{resp_data=Participant};
 post(#cb_context{doc=Doc, req_data=Data}=Context, Id, Action) ->
-    State = wh_json:get_value(<<"state">>, Data, 'false'),
-    maybe_publish_conference_event(Id, Action, wh_util:to_binary(State)),
-    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action, State, Doc)}).
+    States = [{?LOCK_CONF, {'true', ?LOCK_CONF}}
+              ,{?UNLOCK_CONF, {'false', ?LOCK_CONF}}
+              ,{?MUTE_CONF, {'true', ?MUTE_CONF}}
+              ,{?UNMUTE_CONF, {'false', ?MUTE_CONF}}
+              ,{?START_RECORD_CONF, {'true', <<"record">>}}
+              ,{?STOP_RECORD_CONF, {'false', <<"record">>}}
+             ],
+    {State, Action1} = props:get_value(Action, States),
+    maybe_publish_conference_event(Id, Action),
+    crossbar_doc:save(Context#cb_context{doc=wh_json:set_value(Action1, State, Doc)}).
 
 post(Context, _Id, _Action, _CallId) ->
     exec_command(Context).
@@ -232,16 +243,16 @@ validate_command(Context, Id, Action, CallId) ->
             lager:debug("failed to find conference definition ~s", [Id]),
             cb_context:add_validation_error(<<"conference_id">>, <<"required">>, <<"not found">>, Context)
     end.
--spec maybe_publish_conference_event(ne_binary(), ne_binary(), ne_binary()) -> pid().
-maybe_publish_conference_event(ConferenceName, Action, State) ->
+-spec maybe_publish_conference_event(ne_binary(), ne_binary()) -> pid().
+maybe_publish_conference_event(ConferenceName, Action) ->
     spawn(fun() ->
-            Supported = [?RECORD_CONF_PATH_TOKEN, ?LOCK_CONF_PATH_TOKEN],
+            Supported = [?START_RECORD_CONF, ?STOP_RECORD_CONF
+                         ,?LOCK_CONF, ?UNLOCK_CONF
+                        ],
             case lists:member(Action, Supported) of
                 'true' ->
-                    publish_conference_event(ConferenceName
-                                             ,<<Action/binary, "_", State/binary>>
-                                            );
-                'false' -> ok
+                    publish_conference_event(ConferenceName, Action);
+                'false' -> 'ok'
             end
           end).
 
