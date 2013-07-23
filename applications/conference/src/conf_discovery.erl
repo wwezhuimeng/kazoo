@@ -249,7 +249,7 @@ maybe_conference_locked(Conference, Call, Srv) ->
     ConfDoc =  wh_json:get_value(<<"Conference-Doc">>, whapps_conference:to_json(Conference)),
     case wh_json:get_value(<<"lock">>, ConfDoc, 'false') of
         'true' ->
-            whapps_call_command:prompt(<<"conf-locked">>, Call),
+            whapps_call_command:b_prompt(<<"conf-locked">>, Call),
             whapps_call_command:queued_hangup(Call);
         'false' ->
             maybe_collect_conference_pin(Conference, Call, Srv)
