@@ -17,6 +17,7 @@
 -export([start_link/1]).
 -export([relay_amqp/2]).
 -export([handle_participants_event/2]).
+-export([maybe_handle_participant_event/2]).
 -export([handle_conference_error/2]).
 -export([handle_authn_req/2]).
 -export([handle_route_req/2, handle_route_win/2]).
@@ -48,8 +49,11 @@
 -define(RESPONDERS, [{{?MODULE, 'relay_amqp'}
                       ,[{<<"call_event">>, <<"*">>}]
                      }
-                     ,{{?MODULE, 'handle_participants_event'}
-                       ,[{<<"conference">>, <<"participants_event">>}]
+                     % ,{{?MODULE, 'handle_participants_event'}
+                     %   ,[{<<"conference">>, <<"participants_event">>}]
+                     %  }
+                    ,{{?MODULE, 'maybe_handle_participant_event'}
+                       ,[{<<"conference">>, <<"participant_event">>}]
                       }
                      ,{{?MODULE, 'handle_conference_error'}
                        ,[{<<"conference">>, <<"error">>}]
@@ -172,6 +176,22 @@ relay_amqp(JObj, Props) ->
             dtmf(Srv, Digit)
     end.
 
+
+-spec maybe_handle_participant_event(wh_json:object(), wh_proplist()) -> 'ok'.
+maybe_handle_participant_event(JObj, Props) ->
+    Event = wh_json:get_value(<<"Event">>, JObj),
+    Events = [<<"add-member">>, <<"del-member">>],
+    case lists:member(Event, Events) of
+        'false' -> 'ok';
+        'true' -> handle_participant_event(JObj, Props)
+    end.
+
+-spec handle_participant_event(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_participant_event(JObj, Props) ->
+    'true' = wapi_conference:participant_event_v(JObj),
+    Srv = props:get_value('server', Props),
+    gen_listener:cast(Srv, {'sync_participant', JObj}).
+
 -spec handle_participants_event(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_participants_event(JObj, Props) ->
     'true' = wapi_conference:participants_event_v(JObj),
@@ -251,7 +271,7 @@ init([Call]) ->
 %%                                   {stop, Reason, Reply, State} |
 %%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%-fqui-------------------------------------------------------------------
 handle_call({'get_conference'}, _, #participant{conference=Conf}=P) ->
     {'reply', {'ok', Conf}, P};
 handle_call({'get_discovery_event'}, _, #participant{discovery_event=DE}=P) ->
@@ -512,49 +532,28 @@ code_change(_OldVsn, Participant, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec find_participant(wh_proplist(), ne_binary()) ->
-                              {'ok', wh_json:object()} |
-                              {'error', 'not_found'}.
-find_participant([], _) -> {'error', 'not_found'};
-find_participant([Participant|Participants], CallId) ->
-    case wh_json:get_value(<<"Call-ID">>, Participant) of
-        CallId -> {'ok', Participant};
-        _Else -> find_participant(Participants, CallId)
-    end.
-
 -spec sync_participant(wh_json:objects(), whapps_call:call(), participant()) ->
                               participant().
 sync_participant(JObj, Call, #participant{in_conference='false'
                                           ,conference=Conference
                                          }=Participant) ->
-    Participants = wh_json:get_value(<<"Participants">>, JObj, []),
     IsModerator = whapps_conference:moderator(Conference),
-    case find_participant(Participants, whapps_call:call_id(Call)) of
-        {'ok', Moderator} when IsModerator ->
+    case JObj of
+        Moderator when IsModerator ->
             Focus = wh_json:get_value(<<"Focus">>, JObj),
             C = whapps_conference:set_focus(Focus, Conference),
             sync_moderator(Moderator, Call, Participant#participant{conference=C});
-        {'ok', Member} ->
+        Member ->
             Focus = wh_json:get_value(<<"Focus">>, JObj),
             C = whapps_conference:set_focus(Focus, Conference),
-            sync_member(Member, Call, Participant#participant{conference=C});
-        {'error', 'not_found'} ->
-            lager:debug("caller not found in the list of conference participants"),
-            Participant
+            sync_member(Member, Call, Participant#participant{conference=C})
     end;
-sync_participant(JObj, Call, #participant{in_conference='true'}=Participant) ->
-    Participants = wh_json:get_value(<<"Participants">>, JObj, []),
-    case find_participant(Participants, whapps_call:call_id(Call)) of
-        {'ok', Participator} ->
-            lager:debug("caller has is still in the conference", []),
-            Participant#participant{in_conference='true'
-                                    ,muted=(not wh_json:is_true(<<"Speak">>, Participator))
-                                    ,deaf=(not wh_json:is_true(<<"Hear">>, Participator))
-                                   };
-        {'error', 'not_found'} ->
-            lager:debug("participant is not present in conference anymore, terminating"),
-            Participant
-    end.
+sync_participant(JObj, _Call, #participant{in_conference='true'}=Participant) ->
+    lager:debug("caller has is still in the conference", []),
+    Participant#participant{in_conference='true'
+                            ,muted=(not wh_json:is_true(<<"Speak">>, JObj))
+                            ,deaf=(not wh_json:is_true(<<"Hear">>, JObj))
+                           }.
 
 -spec sync_moderator(wh_json:object(), whapps_call:call(), participant()) -> participant().
 sync_moderator(JObj, Call, #participant{conference=Conference
