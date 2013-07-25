@@ -139,7 +139,7 @@ handle_originate_execute(JObj, Props) ->
 init([Node, JObj]) ->
     _ = wh_util:put_callid(JObj),
     ServerId = wh_json:get_ne_value(<<"Server-ID">>, JObj),
-    bind_to_events(freeswitch:version(Node), Node),
+    gproc:reg({'p', 'l', {'event', Node, <<"loopback::bowout">>}}),
     case wapi_resource:originate_req_v(JObj) of
         'false' ->
             Error = <<"originate failed to execute as JObj did not validate">>,
@@ -148,11 +148,6 @@ init([Node, JObj]) ->
         'true' ->
             {'ok', #state{node=Node, originate_req=JObj, server_id=ServerId}}
     end.
-
-bind_to_events({'ok', <<"mod_kazoo", _/binary>>}, Node) ->
-    'ok' = freeswitch:event(Node, ['CUSTOM', 'loopback::bowout']);
-bind_to_events(_, Node) ->
-    gproc:reg({'p', 'l', {'event', Node, <<"loopback::bowout">>}}).
 
 %%--------------------------------------------------------------------
 %% @private
