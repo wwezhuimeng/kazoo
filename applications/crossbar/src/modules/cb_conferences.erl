@@ -429,8 +429,11 @@ update_conference(DocId, #cb_context{}=Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
-on_successful_validation('undefined', #cb_context{doc=JObj}=Context) ->
-    Context#cb_context{doc=wh_json:set_value(<<"pvt_type">>, <<"conference">>, JObj)};
+on_successful_validation('undefined', Context) ->
+    Context1 = check_pins(Context),
+    Context1#cb_context{doc=wh_json:set_value(<<"pvt_type">>
+                                              ,<<"conference">>
+                                              ,cb_context:doc(Context1))};
 on_successful_validation(DocId, #cb_context{}=Context) ->
     crossbar_doc:load_merge(DocId, Context).
 
@@ -452,6 +455,52 @@ normalize_users_results(JObj, Acc, UserId) ->
         UserId -> normalize_view_results(JObj, Acc);
         _ -> ['undefined'|Acc]
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec check_pins(cb_context:context()) -> cb_context:context().
+check_pins(Context) ->
+    PvtFuns = [fun check_participants_pin/1
+               ,fun check_conf_pins/1
+              ],
+    lists:foldl(fun(F, C) -> F(C) end, Context, PvtFuns).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec check_participants_pin(cb_context:context()) -> cb_context:context().
+check_participants_pin(#cb_context{doc=JObj, db_name=AccDb}=Context) ->
+    Ps = lists:foldl(fun(Participant, Acc) ->
+                        case wh_json:get_value(<<"pin">>, Participant) of
+                            'undefined' ->
+                                [NPin] = get_pins(AccDb, 1),
+                                [wh_json:set_value(<<"pin">>, NPin, Participant)|Acc];
+                            Pin ->
+                                [NPin] = pin_is_unique(AccDb, [Pin]),
+                                [wh_json:set_value(<<"pin">>, NPin, Participant)|Acc]
+                        end
+                     end
+                     ,[]
+                     ,wh_json:get_value(<<"participants">>, JObj, [])
+                    ),
+    Context#cb_context{doc=wh_json:set_value(<<"participants">>, Ps, JObj)}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec check_conf_pins(cb_context:context()) -> cb_context:context().
+check_conf_pins(Context) ->
+    Context.
 
 
 %%--------------------------------------------------------------------
