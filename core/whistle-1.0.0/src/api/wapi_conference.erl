@@ -1052,6 +1052,7 @@ bind_q(Queue, Props) ->
 bind_to_q(Q, 'undefined', _) ->
     'ok' = amqp_util:bind_q_to_conference(Q, 'discovery'),
     'ok' = amqp_util:bind_q_to_conference(Q, 'command'),
+    'ok' = amqp_util:bind_q_to_conference(Q, 'participant_event'),
     amqp_util:bind_q_to_conference(Q, 'event');
 bind_to_q(Q, ['discovery'|T], Props) ->
     'ok' = amqp_util:bind_q_to_conference(Q, 'discovery'),
@@ -1069,6 +1070,10 @@ bind_to_q(Q, ['config'|T], Props) ->
 bind_to_q(Q, [{'conference', ConfId}|T], Props) ->
     'ok' = amqp_util:bind_q_to_conference(Q, 'event', ConfId),
     bind_to_q(Q, T, Props);
+bind_to_q(Q, ['participant_event'|T], Props) ->
+    Binding = construct_binding(Props),
+    'ok' = amqp_util:bind_q_to_conference(Q, 'participant_event', Binding),
+    bind_to_q(Q, T, Props);
 bind_to_q(_Q, [], _) -> 'ok'.
 
 %%--------------------------------------------------------------------
@@ -1084,6 +1089,7 @@ unbind_q(Queue, Props) ->
 unbind_from_q(Q, 'undefined', _) ->
     'ok' = amqp_util:unbind_q_from_conference(Q, 'discovery'),
     'ok' = amqp_util:unbind_q_from_conference(Q, 'command'),
+    'ok' = amqp_util:unbind_q_from_conference(Q, 'participant_event'),
     amqp_util:unbind_q_from_conference(Q, 'event');
 unbind_from_q(Q, ['discovery'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_conference(Q, 'discovery'),
@@ -1101,7 +1107,18 @@ unbind_from_q(Q, ['config'|T], Props) ->
     Profile = props:get_value('profile', Props, <<"*">>),
     'ok' = amqp_util:unbind_q_from_conference(Q, 'config', Profile),
     unbind_from_q(Q, T, Props);
+unbind_from_q(Q, ['participant_event'|T], Props) ->
+    Binding = construct_binding(Props),
+    'ok' = amqp_util:unbind_q_from_conference(Q, 'participant_event', Binding),
+    unbind_from_q(Q, T, Props);
 unbind_from_q(_Q, [], _) -> 'ok'.
+
+construct_binding(Props) ->
+    ConfId = props:get_value(<<"Conference-ID">>, Props, <<"*">>),
+    Event = props:get_value(<<"Event">>, Props, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"*">>),
+    <<ConfId/binary, ".", (amqp_util:encode(Event))/binary, ".",  (amqp_util:encode(CallId))/binary>>.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1446,11 +1463,12 @@ publish_participants_event(ConferenceId, Event, ContentType) ->
 %%--------------------------------------------------------------------
 -spec publish_participant_event(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_participant_event(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
-publish_participant_event(ConferenceId, JObj) ->
-    publish_participant_event(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
-publish_participant_event(ConferenceId, Event, ContentType) ->
+publish_participant_event(_ConferenceId, JObj) ->
+    Binding = construct_binding(JObj),
+    publish_participant_event(Binding, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_participant_event(Binding, Event, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Event, ?PARTICIPANT_EVENT_VALUES, fun ?MODULE:participant_event/1),
-    amqp_util:conference_publish(Payload, 'event', ConferenceId, [], ContentType).
+    amqp_util:conference_publish(Payload, 'participant_event', Binding, [], ContentType).
 
 %%--------------------------------------------------------------------
 %% @doc
