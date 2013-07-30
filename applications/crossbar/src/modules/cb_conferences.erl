@@ -567,7 +567,8 @@ create_conferences_pins_doc(AcctDb) ->
                               ,wh_json:new()),
     case couch_mgr:save_doc(AcctDb, Doc) of
         {'ok', _} ->
-            lager:info("~p created in ~p", [?CONF_PIN_DOC, AcctDb]);
+            lager:info("~p created in ~p", [?CONF_PIN_DOC, AcctDb]),
+            'ok';
         {'error', _E} ->
             lager:error("failed to create ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
             'error'
@@ -584,13 +585,12 @@ update_conferences_pins_doc(AcctDb, Pins) ->
     UpdateProps = [{<<"pins">>, Pins}],
     case couch_mgr:update_doc(AcctDb, ?CONF_PIN_DOC, UpdateProps) of
         {'ok', _} ->
-            lager:debug("~p updated in ~p", [?CONF_PIN_DOC, AcctDb]);
+            lager:debug("~p updated in ~p", [?CONF_PIN_DOC, AcctDb]),
+            'ok';
         {'error', _E} ->
             lager:error("failed to update ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
             'error'
     end.
-
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -612,7 +612,7 @@ generate_pins(AcctDb, Number, Acc) ->
         'false' ->
             generate_pins(AcctDb, Number-1, [Pin|Acc]);
         'true' ->
-            generate_pins(AcctDb, Number, [Acc])
+            generate_pins(AcctDb, Number, Acc)
     end.
 
 %%--------------------------------------------------------------------
