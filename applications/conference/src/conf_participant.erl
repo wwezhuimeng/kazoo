@@ -315,7 +315,12 @@ handle_cast({'set_conference', C}, #participant{call=Call}=P) ->
     ControllerQ = whapps_call:controller_queue(Call),
     ConferenceId = whapps_conference:id(C),
     lager:debug("received conference data for conference ~s", [ConferenceId]),
-    gen_listener:add_binding(self(), 'conference', [{'conference', ConferenceId}]),
+    CallId = props:get_value(<<"Call-ID">>, whapps_call:to_proplist(Call)),
+    gen_listener:add_binding(self(), 'conference', [{'restrict_to', ['participant_event']}
+                                                    ,{<<"Conference-ID">>, ConferenceId}
+                                                    ,{<<"Event">>, <<"*">>}
+                                                    ,{<<"Call-ID">>, CallId}
+                                                   ]),
     {'noreply', P#participant{conference=whapps_conference:set_controller_queue(ControllerQ, C)}};
 handle_cast({'set_discovery_event', DE}, #participant{}=Participant) ->
     {'noreply', Participant#participant{discovery_event=DE}};
@@ -559,7 +564,7 @@ sync_participant(JObj, _Call, #participant{in_conference='true'}=Participant) ->
 sync_moderator(JObj, Call, #participant{conference=Conference
                                         ,discovery_event=DiscoveryEvent
                                        }=Participant) ->
-    ParticipantId = wh_json:get_value(<<"Participant-ID">>, JObj),
+    ParticipantId = wh_json:get_value(<<"Call-ID">>, JObj),
     lager:debug("caller has joined the local conference as moderator ~p", [ParticipantId]),
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
@@ -582,7 +587,7 @@ sync_moderator(JObj, Call, #participant{conference=Conference
 sync_member(JObj, Call, #participant{conference=Conference
                                      ,discovery_event=DiscoveryEvent
                                     }=Participant) ->
-    ParticipantId = wh_json:get_value(<<"Participant-ID">>, JObj),
+    ParticipantId = wh_json:get_value(<<"Call-ID">>, JObj),
     lager:debug("caller has joined the local conference as member ~p", [ParticipantId]),
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
