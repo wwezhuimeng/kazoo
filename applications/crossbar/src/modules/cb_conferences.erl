@@ -178,16 +178,16 @@ validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, _) ->
     load_conference(Id, Context).
 
 
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_PATH_TOKEN = Action, PId) ->
-    validate_command(Context, Id, Action, PId);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?DEAF_PATH_TOKEN = Action, PId) ->
-    validate_command(Context, Id, Action, PId);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNMUTE_PATH_TOKEN = Action, PId) ->
-    validate_command(Context, Id, Action, PId);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNDEAF_PATH_TOKEN = Action, PId) ->
-    validate_command(Context, Id, Action, PId);
-validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Action, PId) ->
-    validate_command(Context, Id, Action, PId).
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?MUTE_PATH_TOKEN = Action, CallId) ->
+    validate_command(Context, Id, Action, CallId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?DEAF_PATH_TOKEN = Action, CallId) ->
+    validate_command(Context, Id, Action, CallId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNMUTE_PATH_TOKEN = Action, CallId) ->
+    validate_command(Context, Id, Action, CallId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?UNDEAF_PATH_TOKEN = Action, CallId) ->
+    validate_command(Context, Id, Action, CallId);
+validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id, ?KICK_PATH_TOKEN = Action, CallId) ->
+    validate_command(Context, Id, Action, CallId).
 
 -spec post(cb_context:context(), path_token()) ->
                   cb_context:context().
@@ -305,10 +305,10 @@ exec_command(Context) ->
 -spec exec_command(ne_binary(), ne_binary(), ne_binary()) -> {'ok', any()} | {'error', any()}.
 exec_command(Id, Action) ->
     exec_command(Id, Action, <<"non_moderator">>).
-exec_command(Id, Action, Participant) ->
+exec_command(Id, Action, CallId) ->
     Req = [{<<"Conference-ID">>, Id}
            ,{<<"Application-Name">>, Action}
-           ,{<<"Participant">>, Participant}
+           ,{<<"Call-ID">>, CallId}
            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     PublishFun = fun(P) -> wapi_conference:publish_command(Id, P) end,
