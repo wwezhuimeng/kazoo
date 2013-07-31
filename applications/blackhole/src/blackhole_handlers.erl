@@ -45,12 +45,12 @@ clean_participant_event(JObj) ->
                   ,<<"Node">>
                   ,<<"Server-ID">>
                   ,<<"Switch-Hostname">>
+                  ,<<"Mute-Detect">>
                  ],
-    CleanKeys = [{<<"Mute-Detect">>, <<"mute_detect">>, fun wh_util:to_boolean/1}
-                 ,{<<"Energy-Level">>, <<"energy_level">>, fun wh_util:to_integer/1}
+    CleanKeys = [{<<"Energy-Level">>, <<"energy_level">>, fun wh_util:to_integer/1}
                  ,{<<"Current-Energy">>, <<"current_energy">>, fun wh_util:to_integer/1}
                  ,{<<"Talking">>, <<"talking">>, fun wh_util:to_boolean/1}
-                 ,{<<"Speak">>, <<"speak">>, fun wh_util:to_boolean/1}
+                 ,{<<"Speak">>, <<"mute">>, fun(X) -> not wh_util:to_boolean(X) end}
                  ,{<<"Hear">>, <<"hear">>, fun wh_util:to_boolean/1}
                  ,{<<"Video">>, <<"video">>, fun wh_util:to_boolean/1}
                  ,{<<"Floor">>, <<"floor">>, fun wh_util:to_boolean/1}
