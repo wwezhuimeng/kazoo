@@ -203,6 +203,8 @@ exec(Focus, ConferenceId, JObj) ->
             send_response(App, E, wh_json:get_value(<<"Server-ID">>, JObj), JObj);
         {'noop', Conference} ->
             send_response(App, {'noop', Conference}, wh_json:get_value(<<"Server-ID">>, JObj), JObj);
+        {'hangup', Reason} ->
+            send_response(App, {'hangup', Reason}, wh_json:get_value(<<"Server-ID">>, JObj), JObj);
         {<<"play">>, AppData} ->
             Result =
                 case wh_json:get_value(<<"Call-ID">>, JObj) of
@@ -260,12 +262,16 @@ get_conf_command(<<"participant_energy">>, _Focus, _ConferenceId, JObj) ->
             {<<"energy">>, Args}
     end;
 
-get_conf_command(<<"kick">>, _Focus, _ConferenceId, JObj) ->
+get_conf_command(<<"kick">>, Focus, _ConferenceId, JObj) ->
     case wapi_conference:kick_v(JObj) of
         'false' ->
             {'error', <<"conference kick failed to execute as JObj did not validate.">>};
         'true' ->
-            {<<"hup">>, find_participant_id(JObj, <<"last">>)}
+            ecallmgr_util:send_cmd(Focus
+                                   ,wh_json:get_value(<<"Call-ID">>, JObj)
+                                   ,"hangup"
+                                   ,'ok'),
+            {'hangup', <<"kicked">>}
     end;
 get_conf_command(<<"participants">>, 'undefined', ConferenceId, _) ->
     {'error', <<"Non-Existant ID ", ConferenceId/binary>>};
@@ -506,6 +512,14 @@ send_response(<<"status">>, {'noop', Conference}, RespQ, Command) ->
             | wh_api:default_headers(?APP_NAME, ?APP_VERSION) ++ wh_json:to_proplist(Conference)
            ],
     wapi_conference:publish_status_resp(RespQ, Resp);
+send_response(App, {'hangup', Reason}, RespQ, Command) ->
+    Resp = [{<<"Application-Name">>, App}
+            ,{<<"Response-Message">>, Reason}
+            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, Command)}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    lager:debug("responding for app ~s to ~s: ~s", [App, RespQ, Reason]),
+    wapi_conference:publish_command_resp(RespQ, Resp);
 send_response(App, {'ok', Response}, RespQ, Command) ->
     case binary:match(Response, <<"not found">>) of
         'nomatch' ->
