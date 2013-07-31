@@ -402,13 +402,87 @@ lookup_status(ConfId, Context) ->
                                       )
     of
         {'ok', Status} ->
+            CleanStatus = wh_api:remove_defaults(Status),
             cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
-                                     ,wh_api:remove_defaults(Status)
+                                     ,clean_status(CleanStatus)
                                     );
         {'error', _E} ->
             lager:debug("error getting participants: ~p", [_E]),
             crossbar_util:response('error', <<"No conference data found">>, 404, [], Context)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_status(wh_json:object()) -> wh_json:object().
+clean_status(JObj) ->
+    RemoveKeys = [<<"UUID">>],
+    NJObj = clean_jobj(JObj, RemoveKeys, []),
+    Participants = lists:foldl(fun(Participant, Acc) ->
+                                   [clean_participant(Participant)|Acc]
+                               end
+                               ,[]
+                               ,wh_json:get_value(<<"participants">>, NJObj, [])
+                              ),
+    wh_json:set_value(<<"participants">>, Participants, NJObj).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_participant(wh_json:object()) -> wh_json:object().
+clean_participant(JObj) ->
+    RemoveKeys = [<<"Custom-Channel-Vars">>
+                  ,<<"Switch-Hostname">>
+                  ,<<"Mute-Detect">>
+                 ],
+    CleanKeys = [{<<"Speak">>, <<"mute">>, fun(X) -> not X end}],
+    clean_jobj(JObj, RemoveKeys, CleanKeys).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_jobj(wh_json:object(), [any(), ...], [any(), ...]) -> wh_json:object().
+clean_jobj(JObj, RemoveKeys, []) ->
+    JObj1 = wh_json:delete_keys(RemoveKeys, JObj),
+    wh_json:foldl(
+        fun(K, V, Acc) ->
+            wh_json:set_value(cleanup_binary(K), V, Acc)
+        end
+        ,wh_json:new()
+        ,JObj1
+    );
+clean_jobj(JObj, RemoveKeys, [{OldKey, NewKey} | T]) ->
+    Value = wh_json:get_value(OldKey, JObj),
+    J1 = wh_json:set_value(NewKey, Value, JObj),
+    clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T);
+clean_jobj(JObj, RemoveKeys, [{OldKey, NewKey, Fun} | T]) ->
+    case wh_json:get_value(OldKey, JObj) of
+        'undefined' ->
+            J1 = wh_json:set_value(NewKey, <<"undefined">>, JObj),
+            clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T);
+        Value ->
+            J1 = wh_json:set_value(NewKey, Fun(Value), JObj),
+            clean_jobj(wh_json:delete_key(OldKey, J1), RemoveKeys, T)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec cleanup_binary(ne_binary()) -> ne_binary().
+cleanup_binary(Binary) ->
+    String = binary:bin_to_list(Binary),
+    Binary1 = binary:list_to_bin(string:to_lower(String)),
+    binary:replace(Binary1, <<"-">>, <<"_">>, [global]).
+
 
 %%--------------------------------------------------------------------
 %% @private
