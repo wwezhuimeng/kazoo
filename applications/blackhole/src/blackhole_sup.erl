@@ -16,8 +16,7 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?CACHE('blackhole_cache')
-                   ,?WORKER('blackhole_listener')
-				   ,?WORKER('blackhole_session')
+                   ,?WORKER('blackhole_events_sup')
                   ]).
 
 %% ===================================================================
@@ -32,6 +31,20 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
+	Dispatch = cowboy_router:compile([
+		{'_', [{"/socket.io/1/[...]"
+				,'socketio_handler'
+				,[socketio_session:configure([{'heartbeat', 5000}
+											  ,{'heartbeat_timeout', 30000}
+											  ,{'session_timeout', 30000}
+											  ,{'callback', 'blackhole_socket'}
+											  ,{'protocol', 'socketio_data_protocol'}
+											 ])]}
+			  ]
+        }
+    ]),
+	{ok, _} = cowboy:start_http('socketio_http_listener', 100, [{'port', 5555}],
+									[{'env', [{'dispatch', Dispatch}]}]),
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
 %% ===================================================================
