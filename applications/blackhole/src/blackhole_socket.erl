@@ -24,6 +24,9 @@ open(_Pid, _SId, _Opts) ->
     lager:debug("opening socket ~p", [_SId]),
     {'ok', #state{}}.
 
+close(_Pid, _SId, #state{listener='undefined'}) ->
+    lager:debug("closing socket ~p", [_SId]),
+    'ok';
 close(_Pid, _SId, #state{listener=PidListener, user=User}) ->
     lager:debug("closing socket ~p", [_SId]),
     'ok' = gen_server:call(PidListener, {'disconnect_socket', User}).
