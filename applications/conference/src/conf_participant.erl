@@ -639,8 +639,8 @@ bridge_to_conference(Route, Conference, Call) ->
               ],
     whapps_call_command:send_command(Command, Call).
 
--spec publish_route_response(ne_binary(), api_binary(), ne_binary()) -> 'ok'.
-publish_route_response(ControllerQ, MsgId, ServerId) ->
+-spec publish_route_response(ne_binary(), api_binary(), ne_binary(), ne_binary()) -> 'ok'.
+publish_route_response(ControllerQ, MsgId, ServerId, AccountId) ->
     lager:debug("sending route response for participant invite from local server"),
     Resp = [{<<"Msg-ID">>, MsgId}
             ,{<<"Routes">>, []}
