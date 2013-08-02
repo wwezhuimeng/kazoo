@@ -305,10 +305,10 @@ exec_command(Context) ->
 -spec exec_command(ne_binary(), ne_binary(), ne_binary()) -> {'ok', any()} | {'error', any()}.
 exec_command(Id, Action) ->
     exec_command(Id, Action, <<"non_moderator">>).
-exec_command(Id, Action, CallId) ->
+exec_command(Id, Action, Participant) ->
     Req = [{<<"Conference-ID">>, Id}
            ,{<<"Application-Name">>, Action}
-           ,{<<"Call-ID">>, CallId}
+           ,{<<"Participant">>, Participant}
            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     PublishFun = fun(P) -> wapi_conference:publish_command(Id, P) end,
