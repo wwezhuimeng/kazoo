@@ -21,6 +21,7 @@
 -define(CHILDREN, [{?CONFERENCE_CACHE, cache}
                    ,{conf_participant_sup, supervisor}
                    ,{conf_discovery, worker}
+                   ,{conference_shared_listener, worker}
                   ]).
 
 %% ===================================================================
