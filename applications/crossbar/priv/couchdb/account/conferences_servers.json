@@ -4,6 +4,9 @@
     ,"views": {
         "crossbar_listing": {
             "map": "function(doc) { if (doc.pvt_type != 'conferences_server' || doc.pvt_deleted) return; emit(doc._id, {'id': doc._id, 'name': doc.name}); }"
+        },
+        "listing_by_number": {
+            "map": "function (doc) {if (doc.pvt_type != 'conferences_server' || doc.pvt_deleted) return; if(doc.numbers) {for(number in doc.numbers) {emit(number, null);}}}"
         }
     }
     ,"filters": {
