@@ -569,8 +569,8 @@ sync_moderator(JObj, Call, #participant{conference=Conference
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
     gen_listener:cast(self(), 'play_moderator_entry'),
-    whapps_conference:moderator_join_muted(Conference) andalso gen_listener:cast(self(), mute),
-    whapps_conference:moderator_join_deaf(Conference) andalso gen_listener:cast(self(), deaf),
+    whapps_conference:join_muted(Conference) andalso gen_listener:cast(self(), mute),
+    whapps_conference:join_deaf(Conference) andalso gen_listener:cast(self(), deaf),
     _ = spawn(fun() -> notify_requestor(whapps_call:controller_queue(Call)
                                         ,ParticipantId
                                         ,DiscoveryEvent
@@ -592,8 +592,8 @@ sync_member(JObj, Call, #participant{conference=Conference
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
     gen_listener:cast(self(), 'play_member_entry'),
-    whapps_conference:member_join_muted(Conference) andalso gen_listener:cast(self(), mute),
-    whapps_conference:member_join_deaf(Conference) andalso gen_listener:cast(self(), deaf),
+    whapps_conference:join_muted(Conference) andalso gen_listener:cast(self(), mute),
+    whapps_conference:join_deaf(Conference) andalso gen_listener:cast(self(), deaf),
     _ = spawn(fun() -> notify_requestor(whapps_call:controller_queue(Call)
                                         ,ParticipantId
                                         ,DiscoveryEvent
@@ -670,12 +670,12 @@ send_conference_command(Conference, Call) ->
     {Mute, Deaf} =
         case whapps_conference:moderator(Conference) of
             'true' ->
-                {whapps_conference:moderator_join_muted(Conference)
-                 ,whapps_conference:moderator_join_deaf(Conference)
+                {whapps_conference:join_muted(Conference)
+                 ,whapps_conference:join_deaf(Conference)
                 };
             'false' ->
-                {whapps_conference:member_join_muted(Conference)
-                 ,whapps_conference:member_join_deaf(Conference)
+                {whapps_conference:join_muted(Conference)
+                 ,whapps_conference:join_deaf(Conference)
                 }
         end,
     Command = [{<<"Application-Name">>, <<"conference">>}

@@ -59,9 +59,9 @@
             "type":"boolean",
             "default":true
         },
-        "max_members": {
-            "name":"Max Members",
-            "description":"Sets the maximum number of members that can join a conference",
+        "max_participants": {
+            "name":"Max participants",
+            "description":"Sets the maximum number of participants that can join a conference",
             "type":"integer",
             "minimum":1,
             "default":15
