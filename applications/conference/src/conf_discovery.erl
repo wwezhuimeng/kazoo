@@ -223,9 +223,6 @@ welcome_to_conference(Call, Srv, DiscoveryJObj) ->
     whapps_call_command:prompt(<<"conf-welcome">>, Call),
     collect_conference_pin(Call, Srv, DiscoveryJObj, 1).
 
-
-
-
 collect_conference_pin(Call, _, _, Try) when Try > 3 ->
     lager:debug("caller has failed to provide a valid conference number to many times"),
     _ = whapps_call_command:b_prompt(<<"conf-too_many_attempts">>, Call),
@@ -242,7 +239,7 @@ collect_conference_pin(Call, Srv, DiscoveryJObj, Try) ->
                 {'ok', [JObj]} ->
                     lager:debug("caller has entered a valid conference id, building object"),
                     prepare_whapps_conference(JObj
-                                              ,Call
+                                              ,whapps_call:set_custom_channel_var(<<"pin">>, Digits, Call)
                                               ,Srv);
                 _Else ->
                     lager:debug("could not find conference number ~s: ~p", [Digits, _Else]),

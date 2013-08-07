@@ -235,6 +235,7 @@ create_call_status_resp(Props, 'true') ->
      ,{<<"Other-Leg-Caller-ID-Number">>, OLCINum}
      ,{<<"Other-Leg-Destination-Number">>, props:get_value(<<"Other-Leg-Destination-Number">>, Props)}
      ,{<<"Presence-ID">>, props:get_value(<<"variable_presence_id">>, Props)}
+     ,{<<"Custom-Channel-Vars">>, wh_json:from_list([{<<"pin">>,  props:get_value(<<"variable_ecallmgr_pin">>, Props)}])}
      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)];
 create_call_status_resp(Props, 'false') ->
     {OLCIName, OLCINum} = case props:get_value(<<"Call-Direction">>, Props) of
@@ -262,6 +263,7 @@ create_call_status_resp(Props, 'false') ->
      ,{<<"Other-Leg-Caller-ID-Number">>, OLCINum}
      ,{<<"Other-Leg-Destination-Number">>, props:get_value(<<"Caller-Destination-Number">>, Props)}
      ,{<<"Presence-ID">>, props:get_value(<<"variable_presence_id">>, Props)}
+     ,{<<"Custom-Channel-Vars">>, wh_json:from_list([{<<"pin">>,  props:get_value(<<"variable_ecallmgr_pin">>, Props)}])}
      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)].
 
 -spec uuid_dump(atom(), string() | binary()) ->
