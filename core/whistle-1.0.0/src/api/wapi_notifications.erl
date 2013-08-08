@@ -28,9 +28,9 @@
          ,low_balance/1, low_balance_v/1
          ,transaction/1, transaction_v/1
          ,system_alert/1, system_alert_v/1
-
          %% published on completion of notification
          ,notify_update/1, notify_update_v/1
+         ,conference/1, conference_v/1
         ]).
 
 -export([publish_voicemail/1, publish_voicemail/2
@@ -50,6 +50,7 @@
          ,publish_transaction/1, publish_transaction/2
          ,publish_system_alert/1, publish_system_alert/2
          ,publish_notify_update/2, publish_notify_update/3
+         ,publish_conference/1, publish_conference/2
         ]).
 
 -include_lib("whistle/include/wh_api.hrl").
@@ -73,6 +74,7 @@
 -define(NOTIFY_LOW_BALANCE, <<"notifications.account.low_balance">>).
 -define(NOTIFY_TRANSACTION, <<"notifications.account.transaction">>).
 -define(NOTIFY_SYSTEM_ALERT, <<"notifications.system.alert">>).
+-define(NOTIFY_CONFERENCE, <<"notifications.conference">>).
 
 %% Notify New Voicemail
 -define(VOICEMAIL_HEADERS, [<<"From-User">>, <<"From-Realm">>
@@ -257,6 +259,14 @@
                                ,{<<"Status">>, [<<"completed">>, <<"failed">>]}
                               ]).
 -define(NOTIFY_UPDATE_TYPES, []).
+
+%% Notify Conference Invite
+-define(CONFERENCE_HEADERS, [<<"Emails">>, <<"Type">>]).
+-define(OPTIONAL_CONFERENCE_HEADERS, []).
+-define(CONFERENCE_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                             ,{<<"Event-Name">>, <<"conference">>}
+                            ]).
+-define(CONFERENCE_TYPES, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -552,6 +562,23 @@ notify_update_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?NOTIFY_UPDATE_HEADERS, ?NOTIFY_UPDATE_VALUES, ?NOTIFY_UPDATE_TYPES);
 notify_update_v(JObj) -> notify_update_v(wh_json:to_proplist(JObj)).
 
+%%--------------------------------------------------------------------
+%% @doc Notify conference invite - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+conference(Prop) when is_list(Prop) ->
+    case conference_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?CONFERENCE_HEADERS, ?OPTIONAL_CONFERENCE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for conference"}
+    end;
+conference(JObj) -> conference(wh_json:to_proplist(JObj)).
+
+-spec conference_v(api_terms()) -> boolean().
+conference_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CONFERENCE_HEADERS, ?CONFERENCE_VALUES, ?CONFERENCE_TYPES);
+conference_v(JObj) -> conference_v(wh_json:to_proplist(JObj)).
+
 -spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     amqp_util:notifications_exchange(),
@@ -613,11 +640,13 @@ bind_to_q(Q, ['transaction'|T]) ->
 bind_to_q(Q, ['system_alerts'|T]) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SYSTEM_ALERT),
     bind_to_q(Q, T);
+bind_to_q(Q, ['conference'|T]) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_CONFERENCE),
+    bind_to_q(Q, T);
 bind_to_q(_Q, []) ->
     'ok'.
 
 -spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
-
 unbind_q(Queue, Props) ->
     amqp_util:notifications_exchange(),
     unbind_q_from(Queue, props:get_value('restrict_to', Props)).
@@ -677,6 +706,9 @@ unbind_q_from(Q, ['transaction'|T]) ->
     unbind_q_from(Q, T);
 unbind_q_from(Q, ['system_alert'|T]) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SYSTEM_ALERT),
+    unbind_q_from(Q, T);
+unbind_q_from(Q, ['conference'|T]) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_CONFERENCE),
     unbind_q_from(Q, T);
 unbind_q_from(_Q, []) ->
     'ok'.
@@ -799,3 +831,10 @@ publish_notify_update(RespQ, JObj) -> publish_notify_update(RespQ, JObj, ?DEFAUL
 publish_notify_update(RespQ, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?NOTIFY_UPDATE_VALUES, fun ?MODULE:notify_update/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+-spec publish_conference(api_terms()) -> 'ok'.
+-spec publish_conference(api_terms(), ne_binary()) -> 'ok'.
+publish_conference(JObj) -> publish_conference(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_conference(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?CONFERENCE_VALUES, fun ?MODULE:conference/1),
+    amqp_util:notifications_publish(?NOTIFY_CONFERENCE, Payload, ContentType).

@@ -37,6 +37,7 @@
                      ,{notify_low_balance, [{<<"notification">>, <<"low_balance">>}]}
                      ,{notify_transaction, [{<<"notification">>, <<"transaction">>}]}
                      ,{notify_system_alert, [{<<"notification">>, <<"system_alert">>}]}
+                     ,{notify_conference, [{<<"notification">>, <<"conference">>}]}
                     ]).
 
 -define(RESTRICT_TO, [new_voicemail
@@ -49,6 +50,7 @@
                       ,low_balance
                       ,transaction
                       ,system_alerts
+                      ,conference
                      ]).
 
 -define(BINDINGS, [{notifications, [{restrict_to, ?RESTRICT_TO}]}
