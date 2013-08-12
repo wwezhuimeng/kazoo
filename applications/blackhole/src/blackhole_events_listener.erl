@@ -196,17 +196,6 @@ fw_participant_event(JObj, Pids) ->
     Event = cleanup_binary(wh_json:get_value(<<"Event">>, JObj)),
     fw_participant_event(Event, JObj, Pids).
 
-fw_participant_event(<<"add_member">> =Event, JObj, Pids) ->
-    CleanJObj = clean_participant_event(JObj),
-    Id = wh_json:get_value(<<"Call-ID">>, JObj),
-    {_, RespJObj} = whapps_call_command:b_call_status(Id),
-    Pin = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"pin">>], RespJObj),
-    blackhole_sockets:send_event(Pids
-                                 ,Event
-                                 ,[Id
-                                   ,wh_json:set_value(<<"pin">>, Pin, CleanJObj)
-                                  ]
-                                );
 fw_participant_event(Event, JObj, Pids) ->
     CleanJObj = clean_participant_event(JObj),
     Id = wh_json:get_value(<<"Call-ID">>, JObj),
