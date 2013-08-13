@@ -372,7 +372,8 @@ create_conference(#cb_context{}=Context) ->
 %%--------------------------------------------------------------------
 -spec load_conference(ne_binary(), cb_context:context()) -> cb_context:context().
 load_conference(DocId, Context) ->
-    crossbar_doc:load(DocId, Context).
+    Context1 = crossbar_doc:load(DocId, Context),
+    create_notification(<<"invite">>, Context1).
 
 load_conference_status(ConfId, Context) ->
     Context1 = crossbar_doc:load(ConfId, Context),
@@ -382,7 +383,7 @@ load_conference_status(ConfId, Context) ->
     end.
 
 load_pins(#cb_context{db_name=AccDb}=Context) ->
-    case get_pins(AccDb, 10) of
+    case get_pins(AccDb, 5) of
         [] ->
             lager:error("error getting pins", []),
             crossbar_util:response('error', <<"pins could not be generated">>, 500, [], Context);
@@ -505,6 +506,7 @@ update_conference(DocId, #cb_context{}=Context) ->
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     Context1 = check_pins(Context),
+    _ = create_notification(<<"invite">>, Context1),
     Context1#cb_context{doc=wh_json:set_value(<<"pvt_type">>
                                               ,<<"conference">>
                                               ,cb_context:doc(Context1))};
@@ -557,7 +559,7 @@ check_participants_pin(#cb_context{doc=JObj, db_name=AccDb}=Context) ->
                                 [NPin] = get_pins(AccDb, 1),
                                 [wh_json:set_value(<<"pin">>, NPin, Participant)|Acc];
                             Pin ->
-                                [NPin] = pin_is_unique(AccDb, [Pin]),
+                                [NPin] = conference_pins:unique(AccDb, [Pin]),
                                 [wh_json:set_value(<<"pin">>, NPin, Participant)|Acc]
                         end
                      end
@@ -585,184 +587,32 @@ check_conf_pins(Context) ->
 %%--------------------------------------------------------------------
 -spec get_pins(ne_binary(), integer()) -> [ne_binary(), ...] | [].
 get_pins(AcctDb, N) ->
-    Number = max_pin(N),
-    case couch_mgr:open_doc(AcctDb, ?CONF_PIN_DOC) of
-        {'ok', JObj} ->
-            Pins = wh_json:get_value(<<"pins">>, JObj),
-            maybe_generate_pins(AcctDb, Pins, Number);
-        {'error', 'not_found'} ->
-            lager:info("missing doc ~p in ~p creating...", [?CONF_PIN_DOC, AcctDb]),
-            case create_conferences_pins_doc(AcctDb) of
-                'ok' -> get_pins(AcctDb, Number);
-                'error' -> []
-            end;
-        {'error', _E} ->
-            lager:error("failed to open ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
-            []
-    end.
+   conference_pins:get(AcctDb, N).
+
+create_notification(_Event, Context) ->
+    Doc = cb_context:doc(Context),
+    io:format("MARKER0 ~p~n", [Doc]),
+    Context.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_generate_pins(ne_binary(), [ne_binary(), ...], integer()) -> [ne_binary(), ...].
-maybe_generate_pins(AcctDb, Pins, Number) ->
-    try lists:split(Number, Pins) of
-        {L1, L2} ->
-            NPins = generate_pins(AcctDb, Number, L2),
-            case update_conferences_pins_doc(AcctDb, NPins) of
-                'ok' -> L1;
-                'error' -> get_pins(AcctDb, Number)
-            end
-    catch
-        _E:'badarg' ->
-            lager:error("failed to select ~p pins in ~p, creating new pins...", [Number, AcctDb]),
-            NPins = generate_pins(AcctDb, (Number-erlang:length(Pins)), Pins),
-            update_conferences_pins_doc(AcctDb, NPins),
-            get_pins(AcctDb, Number);
-        _E:_R ->
-            lager:error("failed to select ~p pins in ~p, reason: ~p", [Number, AcctDb, _R]),
-            []
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec create_conferences_pins_doc(ne_binary()) -> 'ok' | 'error'.
-create_conferences_pins_doc(AcctDb) ->
-    Doc  = wh_json:set_values([{<<"_id">>, ?CONF_PIN_DOC}
-                               ,{<<"pins">>, generate_pins(AcctDb, ?CONF_PIN_NUMBER)}
-                              ]
-                              ,wh_json:new()),
-    case couch_mgr:save_doc(AcctDb, Doc) of
-        {'ok', _} ->
-            lager:info("~p created in ~p", [?CONF_PIN_DOC, AcctDb]),
-            'ok';
-        {'error', _E} ->
-            lager:error("failed to create ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
-            'error'
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec update_conferences_pins_doc(ne_binary(), [ne_binary(), ...]) -> 'ok' | 'error'.
-update_conferences_pins_doc(AcctDb, Pins) ->
-    UpdateProps = [{<<"pins">>, Pins}],
-    case couch_mgr:update_doc(AcctDb, ?CONF_PIN_DOC, UpdateProps) of
-        {'ok', _} ->
-            lager:debug("~p updated in ~p", [?CONF_PIN_DOC, AcctDb]),
-            'ok';
-        {'error', _E} ->
-            lager:error("failed to update ~p in ~p, reason: ~p", [?CONF_PIN_DOC, AcctDb, _E]),
-            'error'
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec generate_pins(ne_binary(), integer()) -> [ne_binary(), ...].
--spec generate_pins(ne_binary(), integer(), [ne_binary(), ...]) -> [ne_binary(), ...].
-generate_pins(AcctDb, Number) ->
-    generate_pins(AcctDb, Number, []).
-
-
-generate_pins(AcctDb, 0, Acc) ->
-    pin_is_unique(AcctDb, Acc);
-generate_pins(AcctDb, Number, Acc) ->
-    Pin = create_pin(),
-    case lists:member(Pin, Acc) of
-        'false' ->
-            generate_pins(AcctDb, Number-1, [Pin|Acc]);
-        'true' ->
-            generate_pins(AcctDb, Number, Acc)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec max_pin(integer()) -> integer().
-max_pin(Number) ->
-    case Number > ?CONF_PIN_NUMBER_MAX of
-        'true' ->
-            lager:error("max pin limit reached, request: ~p (max: ~p)", [Number, ?CONF_PIN_NUMBER_MAX]),
-            ?CONF_PIN_NUMBER_MAX;
-        'false' -> Number
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec pin_is_unique(ne_binary(), integer()) -> [ne_binary(), ...].
-pin_is_unique(AcctDb, Pins) ->
-    ViewPins = get_pin_from_view(AcctDb),
-    {Miss, NPins} = lists:foldl(fun(Pin, {Missing, Acc}) ->
-                    case lists:member(Pin, ViewPins) of
-                        'false' ->
-                            {Missing, [Pin|Acc]};
-                        'true' ->
-                            {Missing+1, Acc}
-                    end
-                end
-                ,{0, []}
-                ,Pins
-                ),
-    case Miss of
-        0 -> NPins;
-        N ->
-            lists:merge(generate_pins(AcctDb, N), NPins)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec get_pin_from_view(ne_binary()) -> [ne_binary(), ...] | 'false'.
-get_pin_from_view(AcctDb) ->
-    case couch_mgr:get_all_results(AcctDb, ?CONF_PIN_LIST) of
-        {'ok', JObjs} ->
-            couch_mgr:get_result_keys(JObjs);
-        {'error', _E} ->
-            lager:error("failed to check view ~p in ~p, reason: ~p", [?CONF_PIN_LIST, AcctDb, _E]),
-            'false'
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-
-%% @end
-%%--------------------------------------------------------------------
--spec create_pin() -> ne_binary().
-create_pin() ->
-    Pin =  wh_util:to_binary(random:uniform(999999)),
-    Length = erlang:length(erlang:binary_to_list(Pin)),
-    case  Length < 6 of
-        'true' ->
-            Prefix = binary:copy(<<"0">>, 6-Length),
-            <<Prefix/binary, Pin/binary>>;
-        'false' -> Pin
-    end.
-
-
+-spec notify_conference(ne_binary(), ne_binaries(), wh_json:object()) -> 'ok'.
+notify_conference(Type, Email, Data) ->
+    spawn(fun() ->
+            Req = [{<<"Email">>, Email}
+                   ,{<<"Type">>, Type}
+                   ,{<<"Data">>, Data}
+                   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                  ],
+            _ = whapps_util:amqp_pool_request(
+                    Req
+                    ,fun wapi_notifications:publish_conference/1
+                    ,fun wapi_notifications:conference_v/1
+                )
+          end),
+    'ok'.
 
 
