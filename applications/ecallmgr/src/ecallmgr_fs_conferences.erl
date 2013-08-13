@@ -66,6 +66,7 @@
                      ,switch_hostname :: api_binary() | '_'
                      ,switch_url :: api_binary() | '_'
                      ,switch_external_ip :: api_binary() | '_'
+                     ,custom_channel_vars = [] :: wh_proplist() | '_'
                     }).
 -type conference() :: #conference{}.
 -type conferences() :: [conference(),...] | [].
@@ -148,7 +149,7 @@ props_to_record(Props, Node) ->
                 ,profile_name=props:get_value(<<"Conference-Profile-Name">>, Props)
                 ,switch_hostname=props:get_value(<<"FreeSWITCH-Hostname">>, Props)
                 ,switch_url=props:get_value(<<"URL">>, Props)
-                ,switch_external_ip=props:get_value(<<"Ext-SIP-IP">>, Props)
+                ,custom_channel_vars=ecallmgr_util:custom_channel_vars(Props)
                }.
 
 -spec node(ne_binary()) ->
@@ -624,6 +625,7 @@ record_to_json(#conference{uuid=UUID
                            ,switch_hostname=SwitchHostname
                            ,switch_url=SwitchUrl
                            ,switch_external_ip=SwitchExtIp
+                           ,custom_channel_vars =CCVs
                           }) ->
     wh_json:from_list(
       props:filter_undefined(
@@ -641,6 +643,7 @@ record_to_json(#conference{uuid=UUID
          ,{<<"Switch-Hostname">>, SwitchHostname}
          ,{<<"Switch-URL">>, SwitchUrl}
          ,{<<"Switch-External-IP">>, SwitchExtIp}
+         ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
         ])).
 
 add_participants_to_conference_json(ConfId, ConfJObj) ->
@@ -1047,6 +1050,7 @@ publish_participant_event(Node, Props) ->
              ,{<<"Caller-ID-Name">>, props:get_binary_value(<<"Caller-Caller-ID-Name">>, Props)}
              ,{<<"Caller-ID-Number">>, props:get_binary_value(<<"Caller-Caller-ID-Number">>, Props)}
              ,{<<"Channel-Presence-ID">>, props:get_binary_value(<<"Channel-Presence-ID">>, Props)}
+             ,{<<"Custom-Channel-Vars">>, wh_json:from_list(ecallmgr_util:custom_channel_vars(Props))}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     Publisher = fun(P) -> wapi_conference:publish_participant_event(ConferenceName, P) end,
@@ -1060,6 +1064,7 @@ publish_conference_event(Node, Props) ->
     Event = [{<<"Event">>, props:get_binary_value(<<"Action">>, Props)}
              ,{<<"Focus">>, wh_util:to_binary(Node)}
              ,{<<"Conference-ID">>, props:get_binary_value(<<"Conference-Name">>, Props)}
+             ,{<<"Custom-Channel-Vars">>,  wh_json:from_list(ecallmgr_util:custom_channel_vars(Props))}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     Publisher = fun(P) -> wapi_conference:publish_conference_event(ConferenceName, P) end,

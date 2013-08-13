@@ -354,6 +354,7 @@
                                              ,<<"Current-Energy">>, <<"Energy-Level">>
                                              ,<<"Mute-Detect">>, <<"Caller-ID-Name">>
                                              ,<<"Caller-ID-Number">>, <<"Channel-Presence-ID">>
+                                             ,<<"Custom-Channel-Vars">>
                                             ]).
 -define(PARTICIPANT_EVENT_VALUES, [{<<"Event-Category">>, <<"conference">>}
                                     ,{<<"Event-Name">>, <<"participant_event">>}
@@ -364,7 +365,7 @@
 -define(CONFERENCE_EVENT_HEADERS, [<<"Conference-ID">>, <<"Focus">>
                                     ,<<"Event">>
                                    ]).
--define(OPTIONAL_CONFERENCE_EVENT_HEADERS, []).
+-define(OPTIONAL_CONFERENCE_EVENT_HEADERS, [<<"Custom-Channel-Vars">>]).
 -define(CONFERENCE_EVENT_VALUES, [{<<"Event-Category">>, <<"conference">>}
                                     ,{<<"Event-Name">>, <<"conference_event">>}
                                    ]).

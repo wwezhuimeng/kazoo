@@ -223,6 +223,7 @@ clean_participant_event(JObj) ->
                   ,<<"Server-ID">>
                   ,<<"Switch-Hostname">>
                   ,<<"Mute-Detect">>
+                  ,<<"Custom-Channel-Vars">>
                  ],
     CleanKeys = [{<<"Energy-Level">>, <<"energy_level">>, fun wh_util:to_integer/1}
                  ,{<<"Current-Energy">>, <<"current_energy">>, fun wh_util:to_integer/1}
@@ -232,6 +233,7 @@ clean_participant_event(JObj) ->
                  ,{<<"Video">>, <<"video">>, fun wh_util:to_boolean/1}
                  ,{<<"Floor">>, <<"floor">>, fun wh_util:to_boolean/1}
                  ,{<<"Event">>, <<"event">>, fun cleanup_binary/1}
+                 ,{<<"Custom-Channel-Vars">>, <<"pin">>, fun(X) -> wh_json:get_value(<<"pin">>, X) end}
                 ],
     clean_jobj(JObj, RemoveKeys, CleanKeys).
 

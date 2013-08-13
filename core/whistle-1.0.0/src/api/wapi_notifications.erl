@@ -261,8 +261,8 @@
 -define(NOTIFY_UPDATE_TYPES, []).
 
 %% Notify Conference Invite
--define(CONFERENCE_HEADERS, [<<"Emails">>, <<"Type">>]).
--define(OPTIONAL_CONFERENCE_HEADERS, []).
+-define(CONFERENCE_HEADERS, [<<"Email">>, <<"Type">>]).
+-define(OPTIONAL_CONFERENCE_HEADERS, [<<"Data">>]).
 -define(CONFERENCE_VALUES, [{<<"Event-Category">>, <<"notification">>}
                              ,{<<"Event-Name">>, <<"conference">>}
                             ]).

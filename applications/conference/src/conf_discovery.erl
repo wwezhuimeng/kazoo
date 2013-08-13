@@ -238,7 +238,9 @@ collect_conference_pin(Call, Srv, DiscoveryJObj, Try) ->
             case couch_mgr:get_results(AccountDb, <<"conferences/listing_by_pin">>, ViewOptions) of
                 {'ok', [JObj]} ->
                     lager:debug("caller has entered a valid conference id, building object"),
-                    prepare_whapps_conference(JObj, Call, Srv);
+                    prepare_whapps_conference(JObj
+                                              ,whapps_call:set_custom_channel_var(<<"pin">>, Digits, Call)
+                                              ,Srv);
                 _Else ->
                     lager:debug("could not find conference number ~s: ~p", [Digits, _Else]),
                     _ = whapps_call_command:prompt(<<"conf-bad_conf">>, Call),
