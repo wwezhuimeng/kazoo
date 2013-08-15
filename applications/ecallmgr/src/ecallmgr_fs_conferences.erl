@@ -1050,6 +1050,7 @@ publish_participant_event(Node, Props) ->
              ,{<<"Caller-ID-Name">>, props:get_binary_value(<<"Caller-Caller-ID-Name">>, Props)}
              ,{<<"Caller-ID-Number">>, props:get_binary_value(<<"Caller-Caller-ID-Number">>, Props)}
              ,{<<"Channel-Presence-ID">>, props:get_binary_value(<<"Channel-Presence-ID">>, Props)}
+             ,{<<"Conference-Unique-ID">>, props:get_binary_value(<<"Conference-Unique-ID">>, Props)}
              ,{<<"Custom-Channel-Vars">>, wh_json:from_list(ecallmgr_util:custom_channel_vars(Props))}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],

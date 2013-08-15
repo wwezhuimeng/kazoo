@@ -354,7 +354,7 @@
                                              ,<<"Current-Energy">>, <<"Energy-Level">>
                                              ,<<"Mute-Detect">>, <<"Caller-ID-Name">>
                                              ,<<"Caller-ID-Number">>, <<"Channel-Presence-ID">>
-                                             ,<<"Custom-Channel-Vars">>
+                                             ,<<"Custom-Channel-Vars">>, <<"Conference-Unique-ID">>
                                             ]).
 -define(PARTICIPANT_EVENT_VALUES, [{<<"Event-Category">>, <<"conference">>}
                                     ,{<<"Event-Name">>, <<"participant_event">>}

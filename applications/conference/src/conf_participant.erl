@@ -16,9 +16,7 @@
 %% API
 -export([start_link/1]).
 -export([relay_amqp/2]).
--export([handle_participants_event/2]).
 -export([maybe_handle_participant_event/2]).
--export([handle_conference_error/2]).
 -export([handle_authn_req/2]).
 -export([handle_route_req/2, handle_route_win/2]).
 
@@ -49,14 +47,8 @@
 -define(RESPONDERS, [{{?MODULE, 'relay_amqp'}
                       ,[{<<"call_event">>, <<"*">>}]
                      }
-                     % ,{{?MODULE, 'handle_participants_event'}
-                     %   ,[{<<"conference">>, <<"participants_event">>}]
-                     %  }
-                    ,{{?MODULE, 'maybe_handle_participant_event'}
+                     ,{{?MODULE, 'maybe_handle_participant_event'}
                        ,[{<<"conference">>, <<"participant_event">>}]
-                      }
-                     ,{{?MODULE, 'handle_conference_error'}
-                       ,[{<<"conference">>, <<"error">>}]
                       }
                      ,{{?MODULE, 'handle_authn_req'}
                        ,[{<<"directory">>, <<"authn_req">>}]
@@ -179,35 +171,19 @@ relay_amqp(JObj, Props) ->
 
 -spec maybe_handle_participant_event(wh_json:object(), wh_proplist()) -> 'ok'.
 maybe_handle_participant_event(JObj, Props) ->
+    'true' = wapi_conference:participant_event_v(JObj),
     Event = wh_json:get_value(<<"Event">>, JObj),
     Events = [<<"add-member">>, <<"del-member">>],
     case lists:member(Event, Events) of
         'false' -> 'ok';
-        'true' -> handle_participant_event(JObj, Props)
+        'true' -> handle_participant_event(Event, JObj, Props)
     end.
 
--spec handle_participant_event(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_participant_event(JObj, Props) ->
-    'true' = wapi_conference:participant_event_v(JObj),
+-spec handle_participant_event(ne_binary(), wh_json:object(), wh_proplist()) -> 'ok'.
+handle_participant_event(Event, JObj, Props) ->
     Srv = props:get_value('server', Props),
-    gen_listener:cast(Srv, {'sync_participant', JObj}).
+    gen_listener:cast(Srv, {Event, JObj}).
 
--spec handle_participants_event(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_participants_event(JObj, Props) ->
-    'true' = wapi_conference:participants_event_v(JObj),
-    Srv = props:get_value('server', Props),
-    gen_listener:cast(Srv, {'sync_participant', JObj}).
-
--spec handle_conference_error(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_conference_error(JObj, Props) ->
-    'true' = wapi_conference:conference_error_v(JObj),
-    lager:debug("conference error: ~p", [JObj]),
-    case wh_json:get_value([<<"Request">>, <<"Application-Name">>], JObj) of
-        <<"participants">> ->
-            Srv = props:get_value('server', Props),
-            gen_listener:cast(Srv, {'sync_participant', []});
-        _Else -> 'ok'
-    end.
 
 -spec handle_authn_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_authn_req(JObj, Props) ->
@@ -301,7 +277,8 @@ handle_cast('hungup', #participant{conference=Conference
             'false' -> 'ok'
         end,
     _ = whapps_call_command:hangup(Call),
-    {'stop', {'shutdown', 'hungup'}, Participant};
+    _ = erlang:send_after(5000, self(), 'hungup'),
+    {'noreply', Participant};
 handle_cast({'gen_listener', {'created_queue', Q}}, #participant{call=Call}=P) ->
     {'noreply', P#participant{call=whapps_call:set_controller_queue(Q, Call)}};
 handle_cast({'add_consumer', C}, #participant{call_event_consumers=Cs}=P) ->
@@ -377,12 +354,14 @@ handle_cast({'route_win', JObj}, #participant{conference=Conference
     lager:debug("call ~s joining as moderator ~s", [whapps_call:call_id(B), whapps_conference:moderator(Conference)]),
     whapps_call_command:conference(ConferenceId, 'false', 'false', whapps_conference:moderator(Conference), B),
     {'noreply', Participant#participant{bridge=B}};
-handle_cast({'sync_participant', JObj}, #participant{bridge='undefined'
-                                                     ,call=Call
-                                                    }=Participant) ->
-    {'noreply', sync_participant(JObj, Call, Participant)};
-handle_cast({'sync_participant', JObj}, #participant{bridge=Bridge}=Participant) ->
-    {'noreply', sync_participant(JObj, Bridge, Participant)};
+handle_cast({<<"add-member">>, JObj}, #participant{bridge='undefined'
+                                                   ,call=Call
+                                                  }=Participant) ->
+    {'noreply', add_member(JObj, Call, Participant)};
+handle_cast({<<"add-member">>, JObj}, #participant{bridge=Bridge}=Participant) ->
+    {'noreply', add_member(JObj, Bridge, Participant)};
+handle_cast({<<"del-member">>, _JObj}, #participant{}=Participant) ->
+    {'stop', {'shutdown', 'hungup'}, Participant};
 handle_cast('play_member_entry', #participant{conference=Conference}=Participant) ->
     _ = whapps_conference:play_entry_tone(Conference) andalso
         whapps_conference_command:play(<<"tone_stream://%(200,0,500,600,700)">>, Conference),
@@ -466,6 +445,8 @@ handle_cast(_Cast, Participant) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info('hungup', #participant{}=P) ->
+    {'stop', {'shutdown', 'hungup'}, P};
 handle_info({'EXIT', Consumer, _R}, #participant{call_event_consumers=Consumers}=P) ->
     lager:debug("call event consumer ~p died: ~p", [Consumer, _R]),
     Cs = [C || C <- Consumers, C =/= Consumer],
@@ -537,74 +518,42 @@ code_change(_OldVsn, Participant, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec sync_participant(wh_json:objects(), whapps_call:call(), participant()) ->
+-spec add_member(wh_json:objects(), whapps_call:call(), participant()) ->
                               participant().
-sync_participant(JObj, Call, #participant{in_conference='false'
-                                          ,conference=Conference
-                                         }=Participant) ->
-    IsModerator = whapps_conference:moderator(Conference),
-    case JObj of
-        Moderator when IsModerator ->
-            Focus = wh_json:get_value(<<"Focus">>, JObj),
-            C = whapps_conference:set_focus(Focus, Conference),
-            sync_moderator(Moderator, Call, Participant#participant{conference=C});
-        Member ->
-            Focus = wh_json:get_value(<<"Focus">>, JObj),
-            C = whapps_conference:set_focus(Focus, Conference),
-            sync_member(Member, Call, Participant#participant{conference=C})
-    end;
-sync_participant(JObj, _Call, #participant{in_conference='true'}=Participant) ->
+add_member(JObj, Call, #participant{in_conference='false'
+                                    ,conference=C
+                                    ,discovery_event=DiscoveryEvent
+                                   }=Participant) ->
+    Focus = wh_json:get_value(<<"Focus">>, JObj),
+    Conference = whapps_conference:set_focus(Focus, C),
+    ParticipantId = wh_json:get_value(<<"Call-ID">>, JObj),
+    Deaf = not wh_json:is_true(<<"Hear">>, JObj),
+    Muted = not wh_json:is_true(<<"Speak">>, JObj),
+    case whapps_conference:moderator(C) of
+        'true' ->
+            lager:debug("caller has joined the local conference as moderator ~p", [ParticipantId]),
+            gen_listener:cast(self(), 'play_moderator_entry');
+        'false' ->
+            lager:debug("caller has joined the local conference as member ~p", [ParticipantId]),
+            gen_listener:cast(self(), 'play_member_entry')
+    end, 
+    whapps_conference:join_muted(Conference) andalso gen_listener:cast(self(), 'mute'),
+    whapps_conference:join_deaf(Conference) andalso gen_listener:cast(self(), 'deaf'),
+    _ = spawn(fun() -> notify_requestor(whapps_call:controller_queue(Call)
+                                        ,ParticipantId
+                                        ,DiscoveryEvent
+                                        ,whapps_conference:id(Conference)
+                                       )
+              end),
+    Participant#participant{in_conference='true'
+                            ,muted=Muted
+                            ,deaf=Deaf
+                            ,conference=Conference
+                            ,participant_id=ParticipantId
+                           };
+add_member(_JObj, _Call, #participant{in_conference='true'}=Participant) ->
     lager:debug("caller has is still in the conference", []),
-    Participant#participant{in_conference='true'
-                            ,muted=(not wh_json:is_true(<<"Speak">>, JObj))
-                            ,deaf=(not wh_json:is_true(<<"Hear">>, JObj))
-                           }.
-
--spec sync_moderator(wh_json:object(), whapps_call:call(), participant()) -> participant().
-sync_moderator(JObj, Call, #participant{conference=Conference
-                                        ,discovery_event=DiscoveryEvent
-                                       }=Participant) ->
-    ParticipantId = wh_json:get_value(<<"Call-ID">>, JObj),
-    lager:debug("caller has joined the local conference as moderator ~p", [ParticipantId]),
-    Deaf = not wh_json:is_true(<<"Hear">>, JObj),
-    Muted = not wh_json:is_true(<<"Speak">>, JObj),
-    gen_listener:cast(self(), 'play_moderator_entry'),
-    whapps_conference:join_muted(Conference) andalso gen_listener:cast(self(), mute),
-    whapps_conference:join_deaf(Conference) andalso gen_listener:cast(self(), deaf),
-    _ = spawn(fun() -> notify_requestor(whapps_call:controller_queue(Call)
-                                        ,ParticipantId
-                                        ,DiscoveryEvent
-                                        ,whapps_conference:id(Conference)
-                                       )
-              end),
-    Participant#participant{in_conference='true'
-                            ,muted=Muted
-                            ,deaf=Deaf
-                            ,participant_id=ParticipantId
-                           }.
-
--spec sync_member(wh_json:object(), whapps_call:call(), participant()) -> participant().
-sync_member(JObj, Call, #participant{conference=Conference
-                                     ,discovery_event=DiscoveryEvent
-                                    }=Participant) ->
-    ParticipantId = wh_json:get_value(<<"Call-ID">>, JObj),
-    lager:debug("caller has joined the local conference as member ~p", [ParticipantId]),
-    Deaf = not wh_json:is_true(<<"Hear">>, JObj),
-    Muted = not wh_json:is_true(<<"Speak">>, JObj),
-    gen_listener:cast(self(), 'play_member_entry'),
-    whapps_conference:join_muted(Conference) andalso gen_listener:cast(self(), mute),
-    whapps_conference:join_deaf(Conference) andalso gen_listener:cast(self(), deaf),
-    _ = spawn(fun() -> notify_requestor(whapps_call:controller_queue(Call)
-                                        ,ParticipantId
-                                        ,DiscoveryEvent
-                                        ,whapps_conference:id(Conference)
-                                       )
-              end),
-    Participant#participant{in_conference='true'
-                            ,muted=Muted
-                            ,deaf=Deaf
-                            ,participant_id=ParticipantId
-                           }.
+    Participant.
 
 notify_requestor(MyQ, MyId, DiscoveryEvent, ConferenceId) ->
     case wh_json:get_value(<<"Server-ID">>, DiscoveryEvent) of
