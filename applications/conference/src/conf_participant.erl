@@ -360,7 +360,10 @@ handle_cast({<<"add-member">>, JObj}, #participant{bridge='undefined'
     {'noreply', add_member(JObj, Call, Participant)};
 handle_cast({<<"add-member">>, JObj}, #participant{bridge=Bridge}=Participant) ->
     {'noreply', add_member(JObj, Bridge, Participant)};
-handle_cast({<<"del-member">>, _JObj}, #participant{}=Participant) ->
+handle_cast({<<"del-member">>, JObj}, #participant{conference=Conference}=Participant) ->
+    _ = spawn(fun() -> 
+            conference_history:del_member(JObj ,whapps_conference:to_json(Conference)) 
+          end),
     {'stop', {'shutdown', 'hungup'}, Participant};
 handle_cast('play_member_entry', #participant{conference=Conference}=Participant) ->
     _ = whapps_conference:play_entry_tone(Conference) andalso
@@ -544,6 +547,9 @@ add_member(JObj, Call, #participant{in_conference='false'
                                         ,DiscoveryEvent
                                         ,whapps_conference:id(Conference)
                                        )
+              end),
+    _ = spawn(fun() -> 
+                conference_history:add_member(JObj ,whapps_conference:to_json(Conference)) 
               end),
     Participant#participant{in_conference='true'
                             ,muted=Muted
