@@ -1,0 +1,15 @@
+{
+    "_id": "_design/conferences_history"
+    ,"language": "javascript"
+    ,"views": {
+        "crossbar_listing": {
+            "map": "function(doc) { if (doc.pvt_type != 'conference_history' || doc.pvt_deleted) return; emit(doc._id, null);}"
+        },
+        "running": {
+            "map": "function (doc){if(doc.pvt_type!='conference_history'||doc.pvt_deleted)return;var t=true;if(doc.end_time){t=true}else{var n=doc.participants;for(i in n){if(!n[i].end_time){t=false;break}}}if(!t){emit(doc._id,doc.conference_id)}}"
+        }
+    }
+    ,"filters": {
+        "export":"function(doc, req) { return ( doc.pvt_type == 'conference_history' ); }"
+    }
+}

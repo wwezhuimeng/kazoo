@@ -13,19 +13,22 @@
 -export([add_member/2]).
 -export([del_member/2]).
 
+-define(RUNNING_VIEW, <<"conferences_history/running">>).
 
 add_member(Participant, Conference) ->
 	AccountDb = wh_json:get_value([<<"Conference-Doc">>, <<"pvt_account_db">>], Conference),
 	Id = wh_json:get_value(<<"Conference-Unique-ID">>, Participant),
 	io:format("MARKER0 ~p~n", [Id]),
 	CallId = wh_json:get_value(<<"Call-ID">>, Participant),
+	ConferenceId = wh_json:get_value(<<"Conference-ID">>, Conference),
 	case cfh_exist(AccountDb, Id) of
-		{'error', 'not_found'} -> 
+		{'error', 'not_found'} ->
+			spawn(fun() -> cfh_end_old(AccountDb, ConferenceId) end), 
 			Member = create_member(Participant, Conference),
 			Participants = wh_json:set_value(CallId, Member, wh_json:new()),
 			JObj = wh_json:set_values([{<<"participants">>, Participants}
 									   ,{<<"_id">>, Id}
-									   ,{<<"conference_id">>, wh_json:get_value(<<"Conference-ID">>, Conference)}
+									   ,{<<"conference_id">>, ConferenceId}
 									  ], wh_json:new()),
 			cfh_save(AccountDb, JObj);
 		{'ok', Doc} ->
@@ -88,7 +91,33 @@ cfh_maybe_end(AccountDb, JObj) ->
 		'ended' -> cfh_end(AccountDb, JObj);
 		'not_ended' -> 'ok'
 	end.
-	
+
+
+cfh_end_old(AccountDb, ConferenceId) ->
+	case couch_mgr:get_all_results(AccountDb, ?RUNNING_VIEW) of
+		{'ok', JObjs} ->
+			lists:foldl(
+				fun(JObj, _) ->
+					case wh_json:get_value(<<"value">>, JObj) =:= ConferenceId of
+						'false' -> 'ok';
+						'true' -> 
+							cfh_end(AccountDb, wh_json:get_value(<<"key">>, JObj))
+					end
+				end
+				,[]
+				,JObjs);
+		{'error', _E} ->
+			lager:error("error while loading view ~p in ~p", [?RUNNING_VIEW, AccountDb])
+	end.
+
+cfh_end(AccountDb, Id) when is_binary(Id) ->
+	case couch_mgr:open_doc(AccountDb, Id) of
+		{'ok', JObj} -> 
+			lager:info("ending old conference_history ~p in ~p", [Id, AccountDb]),
+			cfh_end(AccountDb, JObj);
+		{'error', _E} ->
+			lager:error("failed to end old conference_history ~p in ~p", [Id, AccountDb])
+	end;
 cfh_end(AccountDb, JObj) ->
 	Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
 	cfh_save(AccountDb, wh_json:set_value(<<"end_time">>, Timestamp, JObj)).
@@ -105,10 +134,10 @@ cfh_save(AccountDb, JObj) ->
 				,fun(O) -> set_pvt_modified(O) end
 			   ],
 	JObj1 = lists:foldl(fun(F, O) -> F(O) end, JObj, Routines),
-	cfh_save(AccountDb, JObj1, 3)
+	cfh_save(AccountDb, JObj1, 3).
 
 
-cfh_save(AccountDb, _, 0) ->
+cfh_save(AccountDb, JObj, 0) ->
 	Id = wh_json:get_value(<<"_id">>, JObj),
 	lager:error("failed to conference_history ~p in ~p: too many attempts", [Id, AccountDb]);
 cfh_save(AccountDb, JObj, Attempt) ->
