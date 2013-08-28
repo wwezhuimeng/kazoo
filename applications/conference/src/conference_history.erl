@@ -18,7 +18,6 @@
 add_member(Participant, Conference) ->
 	AccountDb = wh_json:get_value([<<"Conference-Doc">>, <<"pvt_account_db">>], Conference),
 	Id = wh_json:get_value(<<"Conference-Unique-ID">>, Participant),
-	io:format("MARKER0 ~p~n", [Id]),
 	CallId = wh_json:get_value(<<"Call-ID">>, Participant),
 	ConferenceId = wh_json:get_value(<<"Conference-ID">>, Conference),
 	ConferenceName = wh_json:get_value([<<"Conference-Doc">>, <<"name">>], Conference),
@@ -100,7 +99,6 @@ cfh_end_old(AccountDb, ConferenceId) ->
 		{'ok', JObjs} ->
 			lists:foldl(
 				fun(JObj, _) ->
-					io:format("MARKER3 ~p~n", [JObj]),
 					case wh_json:get_value([<<"value">>, <<"conference_id">>], JObj) =:= ConferenceId of
 						'false' -> 'ok';
 						'true' -> 

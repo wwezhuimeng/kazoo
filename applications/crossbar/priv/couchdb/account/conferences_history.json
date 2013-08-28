@@ -3,10 +3,10 @@
     ,"language": "javascript"
     ,"views": {
         "crossbar_listing": {
-            "map": "function(doc) { if (doc.pvt_type != 'conference_history' || doc.pvt_deleted) return; emit(doc._id, null);}"
+            "map": "function(doc) { if (doc.pvt_type != 'conference_history' || doc.pvt_deleted) return; emit(doc._id, {id: doc._id, conference_id: doc.conference_id, start_time: doc.start_time, end_time: doc.end_time || 0, conference_name: doc.conference_name});}"
         },
         "running": {
-            "map": "function (doc){if(doc.pvt_type!='conference_history'||doc.pvt_deleted)return;var t=true;if(doc.end_time){t=true}else{var n=doc.participants;for(i in n){if(!n[i].end_time){t=false;break}}}if(!t){emit(doc._id, {conference_id: doc.conference_id, start_time: doc.start_time, conference_name: doc.conference_name})}}"
+            "map": "function (doc){if(doc.pvt_type!='conference_history'||doc.pvt_deleted)return;var t=true;if(doc.end_time){t=true}else{var n=doc.participants;for(i in n){if(!n[i].end_time){t=false;break}}}if(!t){emit(doc._id, {id: doc._id, conference_id: doc.conference_id, start_time: doc.start_time, conference_name: doc.conference_name})}}"
         }
     }
     ,"filters": {
