@@ -21,6 +21,7 @@ add_member(Participant, Conference) ->
 	io:format("MARKER0 ~p~n", [Id]),
 	CallId = wh_json:get_value(<<"Call-ID">>, Participant),
 	ConferenceId = wh_json:get_value(<<"Conference-ID">>, Conference),
+	ConferenceName = wh_json:get_value([<<"Conference-Doc">>, <<"name">>], Conference),
 	case cfh_exist(AccountDb, Id) of
 		{'error', 'not_found'} ->
 			spawn(fun() -> cfh_end_old(AccountDb, ConferenceId) end), 
@@ -29,6 +30,7 @@ add_member(Participant, Conference) ->
 			JObj = wh_json:set_values([{<<"participants">>, Participants}
 									   ,{<<"_id">>, Id}
 									   ,{<<"conference_id">>, ConferenceId}
+									   ,{<<"conference_name">>, ConferenceName}
 									  ], wh_json:new()),
 			cfh_save(AccountDb, JObj);
 		{'ok', Doc} ->
@@ -98,7 +100,8 @@ cfh_end_old(AccountDb, ConferenceId) ->
 		{'ok', JObjs} ->
 			lists:foldl(
 				fun(JObj, _) ->
-					case wh_json:get_value(<<"value">>, JObj) =:= ConferenceId of
+					io:format("MARKER3 ~p~n", [JObj]),
+					case wh_json:get_value([<<"value">>, <<"conference_id">>], JObj) =:= ConferenceId of
 						'false' -> 'ok';
 						'true' -> 
 							cfh_end(AccountDb, wh_json:get_value(<<"key">>, JObj))
