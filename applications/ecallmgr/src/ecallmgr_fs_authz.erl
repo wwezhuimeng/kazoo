@@ -287,10 +287,17 @@ ensure_account_id_exists(Props, CallId, Node) ->
                     lager:debug("unable to determine the account id: ~p", [_R]),
                     maybe_deny_call(Props, CallId, Node);
                 {'ok', Resp} ->
-                    update_account_id(Resp, Props, CallId, Node)
+                    maybe_ipdevice_auth(Resp, Props, CallId, Node)
             end;
         _Else ->
             authorize_account(Props, CallId, Node)
+    end.
+
+-spec maybe_ipdevice_auth(wh_json:object(), wh_proplist(), ne_binary(), atom()) -> boolean().
+maybe_ipdevice_auth(Resp, Props, CallId, Node) ->
+    case props:get_value(<<"IP-Device">>, Resp) of
+        <<"false">> -> update_account_id(Resp, Props, CallId, Node);
+        <<"true">> -> 'true'
     end.
 
 -spec update_account_id(wh_proplist(), wh_proplist(), ne_binary(), atom()) -> boolean().
@@ -481,6 +488,7 @@ identify_account(_, Props) ->
                 'true' ->
                     {'ok', [{?GET_CCV(<<"Account-ID">>), wh_json:get_value(<<"Account-ID">>, RespJObj)}
                             ,{?GET_CCV(<<"Reseller-ID">>), wh_json:get_value(<<"Reseller-ID">>, RespJObj)}
+                            ,{?GET_CCV(<<"IP-Device">>), wh_util:to_binary(wh_json:is_true(<<"IP-Device">>, RespJObj))}
                             |Props
                            ]}
             end

@@ -10,5 +10,7 @@
 -define(APP_VERSION, <<"1.0.0">>).
 -define(APP_NAME, <<"ipdevice">>).
 
+-define(DEVICE_BY_IP, <<"credentials/lookup_by_ip">>).
+
 -define(IPDEVICE_HRL, true).
 -endif.

@@ -1,20 +1,27 @@
 -module(ipdevice_listener).
 -behaviour(gen_listener).
 
--include_lib("whistle/include/wh_types.hrl").
+-include("ipdevice.hrl").
+
 %% API
 -export([start_link/0,start/0,init/1,handle_call/3,handle_cast/2,handle_info/2
          ,terminate/2,code_change/3,handle_req/2]).
 
 -record(state,{}).
 
--define(SERVER,?MODULE).
--define(RESPONDERS, [{{?MODULE,handle_req},[{<<"*">>, <<"*">>}]}]).
-
--define(BINDINGS, [{'self',[]}]).
--define(QUEUE_NAME, <<"ipdevice">>).
-%-define(QUEUE_OPTIONS, [{exclusive, false}]).
-%-define(CONSUME_OPTIONS, [{exclusive, false}]).
+-define(SERVER, ?MODULE).
+-define(RESPONDERS, [{{'ipdevice_identify_req'}
+                      ,[{<<"authz">>, <<"identify_req">>}]}
+                     ,{{'ipdevice_route_req'}
+                       ,[{<<"route">>, <<"route_req">>}]}
+                    ]).
+-define(BINDINGS, [{'authz', []}
+                   ,{'route', []}
+                   ,{'self', []}
+                  ]).
+-define(QUEUE_NAME, <<>>).
+-define(QUEUE_OPTIONS, []).
+-define(CONSUME_OPTIONS, []).
 
 -spec start() -> 'ok' | {'error', _}.
 start() ->
@@ -33,8 +40,8 @@ start_link() ->
                             ,[{bindings, ?BINDINGS}
                               ,{responders, ?RESPONDERS}
                               ,{queue_name, ?QUEUE_NAME}
-                              %,{queue_options, ?QUEUE_OPTIONS}
-                              %,{consume_options, ?CONSUME_OPTIONS}
+                              ,{queue_options, ?QUEUE_OPTIONS}
+                              ,{consume_options, ?CONSUME_OPTIONS}
                              ]
                             ,[]).
 
