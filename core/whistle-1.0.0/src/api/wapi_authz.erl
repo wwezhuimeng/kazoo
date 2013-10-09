@@ -38,7 +38,10 @@
                                 ,<<"Account-ID">>, <<"Request">>, <<"Usage">>
                                 ,<<"Call-Direction">>, <<"Auth-Account-ID">>
                            ]).
--define(OPTIONAL_AUTHZ_REQ_HEADERS, [<<"Custom-Channel-Vars">>, <<"Switch-Hostname">>]).
+
+-define(OPTIONAL_AUTHZ_REQ_HEADERS, [<<"Custom-Channel-Vars">>
+					 ,<<"Switch-Hostname">>]).
+
 -define(AUTHZ_REQ_VALUES, [{<<"Event-Category">>, ?EVENT_CATEGORY}
                            ,{<<"Event-Name">>, <<"authz_req">>}
                           ]).

@@ -6,6 +6,7 @@
 
 -spec handle_req(wh_json:object(), wh_proplist()) -> any().
 handle_req(JObj, _Props) ->
+    io:format("got identify req ~p~n",[JObj]),
     'true' = wapi_authz:identify_req_v(JObj),
     wh_util:put_callid(JObj),
     case ipdevice_util:get_device_ccv(JObj) of

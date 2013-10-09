@@ -10,11 +10,9 @@
 -record(state,{}).
 
 -define(SERVER, ?MODULE).
--define(RESPONDERS, [{{'ipdevice_identify_req'}
-                      ,[{<<"authz">>, <<"identify_req">>}]}
-                     ,{{'ipdevice_route_req'}
-                       ,[{<<"route">>, <<"route_req">>}]}
-                    ]).
+-define(RESPONDERS, [{'ipdevice_identify_req',[{<<"authz">>, <<"identify_req">>}]}
+%%%		     ,{'ipdevice_route_req'},[{<<"route">>, <<"route_req">>}]
+		    ]).
 -define(BINDINGS, [{'authz', []}
                    ,{'route', []}
                    ,{'self', []}
