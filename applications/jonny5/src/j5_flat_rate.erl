@@ -18,9 +18,9 @@
 -define(MAX_RECURSE_DEPTH, whapps_config:get_integer(?CONFIG_CAT, <<"dialed_region_max_recurse_depth">>, 20)).
 
 -ifdef(TEST).
--define(DEFAULT_TRUNK_ELIGIBLE_ON_REGEX_ERROR, 'false').
+-define(TRUNK_ELIGIBLE_ON_REGEX_ERROR, 'false').
 -else.
--define(DEFAULT_TRUNK_ELIGIBLE_ON_REGEX_ERROR
+-define(TRUNK_ELIGIBLE_ON_REGEX_ERROR
         ,whapps_config:get_is_true(?CONFIG_CAT, <<"is_trunk_eligible_on_regex_error">>, 'false')
        ).
 -endif.
@@ -102,7 +102,7 @@ eligible_for_flat_rate([TrunkDefID|TrunkDefIDs], Number, Direction, Class, Path,
             BlackClass  = wh_json:get_value(<<Direction/binary, "_black_num_classifications">>, CustomTrunkDefs),
             WhiteClass  = wh_json:get_value(<<Direction/binary, "_white_num_classifications">>, CustomTrunkDefs),
             WhiteRecurseDefs = wh_json:get_value(<<"include_defs">>, CustomTrunkDefs),
-            BlaskRecurseDefs = wh_json:get_value(<<"exclude_defs">>, CustomTrunkDefs),
+            BlackRecurseDefs = wh_json:get_value(<<"exclude_defs">>, CustomTrunkDefs),
             %% check called number class against black_num_classifications.
             %% If matched reject. Else try the other methods that might authorize the trunk.
             lager:debug("checking def id: ~s, others this level: ~p. trunk def: ~p"
