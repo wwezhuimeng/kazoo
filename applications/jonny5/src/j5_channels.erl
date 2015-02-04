@@ -53,7 +53,7 @@
                   ,account_id :: api_binary() | '$1' | '_'
                   ,account_billing :: api_binary() | '$1' | '_'
                   ,account_allotment = 'false' :: boolean() | '_'
-                  ,reseller_id :: api_binary() | '$1' | '_'
+                  ,reseller_id :: api_binary() | '$1' | '$2' | '_'
                   ,reseller_billing :: api_binary() | '$1' | '_'
                   ,reseller_allotment = 'false' :: boolean() | '_'
                   ,soft_limit = 'false' :: boolean() | '_'
@@ -83,14 +83,15 @@
                              ]}
                   ]).
 -define(RESPONDERS, [{{?MODULE, 'handle_authz_resp'}
-                      ,[{<<"authz">>, <<"authz_resp">>}]}
+                      ,[{<<"authz">>, <<"authz_resp">>}]
+                     }
                      ,{{?MODULE, 'handle_rate_resp'}
-                       ,[{<<"rate">>, <<"resp">>}]}
+                       ,[{<<"rate">>, <<"resp">>}]
+                      }
                     ]).
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
-
 
 %%%===================================================================
 %%% API
