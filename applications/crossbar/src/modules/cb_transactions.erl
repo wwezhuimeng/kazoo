@@ -175,7 +175,7 @@ fetch_monthly_recurring(Context, Options) ->
         {'ok', Transactions} ->
             JObjs = [JObj
                      || JObj <- maybe_filter_by_reason(Transactions, Options)
-                            ,wh_json:get_integer_value(<<"code">>, JObj) =:= ?CODE_MONTHLY_RECURRING
+                            ,wh_json:get_integer_value(<<"code">>, JObj) =:= ?CODE_MONTHLY_RECURRING_DEBIT
                     ],
             send_resp({'ok', JObjs}, Context)
     end.

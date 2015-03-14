@@ -120,7 +120,7 @@ trying_top_up(Account, Amount, [JObj|JObjs]) ->
 -spec top_up(ne_binary(), integer()) -> 'ok' | 'error'.
 top_up(Account, Amount) ->
     Transaction = wh_transaction:debit(Account, wht_util:dollars_to_units(Amount)),
-    Transaction1 = wh_transaction:set_reason(<<"topup">>, Transaction),
+    Transaction1 = wh_transaction:set_reason(<<"topup_debit">>, Transaction),
     case wh_transaction:service_save(Transaction1) of
         {'error', _E} ->
             lager:error("fail to top up ~s : ~p", [Account, _E]),

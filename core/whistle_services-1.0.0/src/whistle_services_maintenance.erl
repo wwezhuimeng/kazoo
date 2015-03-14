@@ -29,7 +29,7 @@
 -spec credit(ne_binary(), text()) -> 'no_return'.
 credit(AccountId, Amount) ->
     Units = wht_util:dollars_to_units(Amount),
-    Routines = [fun(T) -> wh_transaction:set_reason(<<"admin_discretion">>, T) end
+    Routines = [fun(T) -> wh_transaction:set_reason(<<"admin_discretion_credit">>, T) end
                 ,fun(T) ->
                          wh_transaction:set_description(<<"system adminstrator credit modification">>, T)
                  end
@@ -53,7 +53,7 @@ credit(AccountId, Amount) ->
 -spec debit(ne_binary(), text()) -> 'no_return'.
 debit(AccountId, Amount) ->
     Units = wht_util:dollars_to_units(Amount),
-    Routines = [fun(T) -> wh_transaction:set_reason(<<"admin_discretion">>, T) end
+    Routines = [fun(T) -> wh_transaction:set_reason(<<"admin_discretion_debit">>, T) end
                 ,fun(T) ->
                          wh_transaction:set_description(<<"system adminstrator credit modification">>, T)
                  end

@@ -35,23 +35,58 @@
 %% tracked in hundred-ths of a cent
 -define(DOLLAR_TO_UNIT, 10000).
 
--define(REASONS, [{<<"per_minute_call">>, ?CODE_PER_MINUTE_CALL}
-                  ,{<<"sub_account_per_minute_call">>, ?CODE_SUB_ACCOUNT_PER_MINUTE_CALL}
-                  ,{<<"feature_activation">>, ?CODE_FEATURE_ACTIVATION}
-                  ,{<<"sub_account_feature_activation">>, ?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION}
-                  ,{<<"number_activation">>, ?CODE_NUMBER_ACTIVATION}
-                  ,{<<"sub_account_number_activation">>, ?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION}
-                  ,{<<"manual_addition">>, ?CODE_MANUAL_ADDITION}
-                  ,{<<"sub_account_manual_addition">>, ?CODE_SUB_ACCOUNT_MANUAL_ADDITION}
-                  ,{<<"auto_addition">>, ?CODE_AUTO_ADDITION}
-                  ,{<<"sub_account_auto_addition">>, ?CODE_SUB_ACCOUNT_AUTO_ADDITION}
-                  ,{<<"admin_discretion">>, ?CODE_ADMIN_DISCRETION}
-                  ,{<<"topup">>, ?CODE_TOPUP}
-                  ,{<<"database_rollup">>, ?CODE_DATABASE_ROLLUP}
-                  ,{<<"recurring">>, ?CODE_RECURRING}
-                  ,{<<"monthly_recurring">>, ?CODE_MONTHLY_RECURRING}
-                  ,{<<"recurring_prorate">>, ?CODE_RECURRING_PRORATE}
-                  ,{<<"unknown">>, ?CODE_UNKNOWN}
+%% NOTE: Those missing _debit/_credit are for backward compatability with
+%%  already stored transactions and can be removed after 8/01/15
+-define(REASONS, [{<<"unknown_debit">>, ?CODE_UNKNOWN_DEBIT}
+                  ,{<<"per_minute_call">>, ?CODE_PER_MINUTE_CALL_DEBIT}
+                  ,{<<"per_minute_call_debit">>, ?CODE_PER_MINUTE_CALL_DEBIT}
+                  ,{<<"per_minute_call_credit">>, ?CODE_PER_MINUTE_CALL_CREDIT}
+                  ,{<<"sub_account_per_minute_call">>, ?CODE_SUB_ACCOUNT_PER_MINUTE_CALL_DEBIT}
+                  ,{<<"sub_account_per_minute_call_debit">>, ?CODE_SUB_ACCOUNT_PER_MINUTE_CALL_DEBIT}
+                  ,{<<"sub_account_per_minute_call_credit">>, ?CODE_SUB_ACCOUNT_PER_MINUTE_CALL_CREDIT}
+                  ,{<<"feature_activation">>, ?CODE_FEATURE_ACTIVATION_DEBIT}
+                  ,{<<"feature_activation_debit">>, ?CODE_FEATURE_ACTIVATION_DEBIT}
+                  ,{<<"feature_activation_credit">>, ?CODE_FEATURE_ACTIVATION_CREDIT}
+                  ,{<<"sub_account_feature_activation">>, ?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION_DEBIT}
+                  ,{<<"sub_account_feature_activation_debit">>, ?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION_DEBIT}
+                  ,{<<"sub_account_feature_activation_credit">>, ?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION_CREDIT}
+                  ,{<<"number_activation">>, ?CODE_NUMBER_ACTIVATION_DEBIT}
+                  ,{<<"number_activation_debit">>, ?CODE_NUMBER_ACTIVATION_DEBIT}
+                  ,{<<"number_activation_credit">>, ?CODE_NUMBER_ACTIVATION_CREDIT}
+                  ,{<<"sub_account_number_activation">>, ?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION_DEBIT}
+                  ,{<<"sub_account_number_activation_debit">>, ?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION_DEBIT}
+                  ,{<<"sub_account_number_activation_credit">>, ?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION_CREDIT}
+                  ,{<<"manual_addition">>, ?CODE_MANUAL_ADDITION_DEBIT}
+                  ,{<<"manual_addition_debit">>, ?CODE_MANUAL_ADDITION_DEBIT}
+                  ,{<<"manual_addition_credit">>, ?CODE_MANUAL_ADDITION_CREDIT}
+                  ,{<<"sub_account_manual_addition">>, ?CODE_SUB_ACCOUNT_MANUAL_ADDITION_DEBIT}
+                  ,{<<"sub_account_manual_addition_debit">>, ?CODE_SUB_ACCOUNT_MANUAL_ADDITION_DEBIT}
+                  ,{<<"sub_account_manual_addition_credit">>, ?CODE_SUB_ACCOUNT_MANUAL_ADDITION_CREDIT}
+                  ,{<<"auto_addition">>, ?CODE_AUTO_ADDITION_DEBIT}
+                  ,{<<"auto_addition_debit">>, ?CODE_AUTO_ADDITION_DEBIT}
+                  ,{<<"auto_addition_credit">>, ?CODE_AUTO_ADDITION_CREDIT}
+                  ,{<<"sub_account_auto_addition">>, ?CODE_SUB_ACCOUNT_AUTO_ADDITION_DEBIT}
+                  ,{<<"sub_account_auto_addition_debit">>, ?CODE_SUB_ACCOUNT_AUTO_ADDITION_DEBIT}
+                  ,{<<"sub_account_auto_addition_credit">>, ?CODE_SUB_ACCOUNT_AUTO_ADDITION_CREDIT}
+                  ,{<<"admin_discretion">>, ?CODE_ADMIN_DISCRETION_DEBIT}
+                  ,{<<"admin_discretion_debit">>, ?CODE_ADMIN_DISCRETION_DEBIT}
+                  ,{<<"admin_discretion_credit">>, ?CODE_ADMIN_DISCRETION_CREDIT}
+                  ,{<<"topup">>, ?CODE_TOPUP_DEBIT}
+                  ,{<<"topup_debit">>, ?CODE_TOPUP_DEBIT}
+                  ,{<<"topup_credit">>, ?CODE_TOPUP_CREDIT}
+                  ,{<<"database_rollup">>, ?CODE_DATABASE_ROLLUP_DEBIT}
+                  ,{<<"database_rollup_debit">>, ?CODE_DATABASE_ROLLUP_DEBIT}
+                  ,{<<"database_rollup_credit">>, ?CODE_DATABASE_ROLLUP_CREDIT}
+                  ,{<<"recurring">>, ?CODE_RECURRING_DEBIT}
+                  ,{<<"recurring_debit">>, ?CODE_RECURRING_DEBIT}
+                  ,{<<"recurring_credit">>, ?CODE_RECURRING_CREDIT}
+                  ,{<<"monthly_recurring">>, ?CODE_MONTHLY_RECURRING_DEBIT}
+                  ,{<<"monthly_recurring_debit">>, ?CODE_MONTHLY_RECURRING_DEBIT}
+                  ,{<<"monthly_recurring_credit">>, ?CODE_MONTHLY_RECURRING_CREDIT}
+                  ,{<<"recurring_prorate">>, ?CODE_RECURRING_DEBIT_PRORATE}
+                  ,{<<"recurring_prorate_debit">>, ?CODE_RECURRING_DEBIT_PRORATE}
+                  ,{<<"recurring_prorate_credit">>, ?CODE_RECURRING_CREDIT_PRORATE}
+                  ,{<<"unknown_credit">>, ?CODE_UNKNOWN_CREDIT}
                  ]).
 
 reasons() ->
@@ -351,7 +386,7 @@ calculate_cost(R, RI, RM, Sur, Secs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec default_reason() -> ne_binary().
-default_reason() -> <<"unknown">>.
+default_reason() -> <<"unknown_debit">>.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -414,10 +449,9 @@ modb(AccountMODb) ->
 
 -spec rollup(wh_transaction:transaction()) -> 'ok'.
 -spec rollup(ne_binary(), integer()) -> 'ok'.
-rollup(Transaction) ->
-    Transaction1 = wh_transaction:set_reason(<<"database_rollup">>, Transaction),
-    Transaction2 = wh_transaction:set_description(<<"monthly rollup">>, Transaction1),
-    case wh_transaction:save(Transaction2) of
+rollup(Transaction0) ->
+    Transaction1 = wh_transaction:set_description(<<"monthly rollup">>, Transaction0),
+    case wh_transaction:save(Transaction1) of
         {'error', 'conflict'} ->
             lager:warning("monthly rollup transaction failed: document already exist", []);
         {'error', _E} ->
@@ -428,10 +462,12 @@ rollup(Transaction) ->
 
 rollup(<<_/binary>> = AccountMODb, Balance) when Balance >= 0 ->
     AccountId = wh_util:format_account_id(AccountMODb, 'raw'),
-    rollup(wh_transaction:credit(AccountId, Balance));
+    Transaction = wh_transaction:credit(AccountId, Balance),
+    rollup(wh_transaction:set_reason(<<"database_rollup_credit">>, Transaction));
 rollup(<<_/binary>> = AccountMODb, Balance) ->
     AccountId = wh_util:format_account_id(AccountMODb, 'raw'),
-    rollup(wh_transaction:debit(AccountId, -1*Balance)).
+    Transaction = wh_transaction:debit(AccountId, -1*Balance),
+    rollup(wh_transaction:set_reason(<<"database_rollup_debit">>, Transaction)).
 
 %%--------------------------------------------------------------------
 %% @private

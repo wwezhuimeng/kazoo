@@ -557,26 +557,26 @@ prepare_transaction(#wh_transaction{pvt_account_id='undefined'}) ->
 prepare_transaction(#wh_transaction{pvt_account_db='undefined'}) ->
     {'error', 'account_db_missing'};
 prepare_transaction(#wh_transaction{pvt_code=Code}=Transaction)
-  when ?CODE_PER_MINUTE_CALL =:= Code
-       orelse ?CODE_SUB_ACCOUNT_PER_MINUTE_CALL =:= Code ->
+  when ?CODE_PER_MINUTE_CALL_DEBIT =:= Code
+       orelse ?CODE_SUB_ACCOUNT_PER_MINUTE_CALL_DEBIT =:= Code ->
     prepare_call_transaction(Transaction);
 prepare_transaction(#wh_transaction{pvt_code=Code}=Transaction)
-  when ?CODE_FEATURE_ACTIVATION =:= Code
-       orelse ?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION =:= Code ->
+  when ?CODE_FEATURE_ACTIVATION_DEBIT =:= Code
+       orelse ?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION_DEBIT =:= Code ->
     prepare_feature_activation_transaction(Transaction);
 prepare_transaction(#wh_transaction{pvt_code=Code}=Transaction)
-  when ?CODE_NUMBER_ACTIVATION =:= Code
-       orelse ?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION =:= Code ->
+  when ?CODE_NUMBER_ACTIVATION_DEBIT =:= Code
+       orelse ?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION_DEBIT =:= Code ->
     prepare_number_activation_transaction(Transaction);
 prepare_transaction(#wh_transaction{pvt_code=Code}=Transaction)
-  when ?CODE_MANUAL_ADDITION =:= Code
-       orelse ?CODE_SUB_ACCOUNT_MANUAL_ADDITION =:= Code ->
+  when ?CODE_MANUAL_ADDITION_DEBIT =:= Code
+       orelse ?CODE_SUB_ACCOUNT_MANUAL_ADDITION_DEBIT =:= Code ->
     prepare_manual_addition_transaction(Transaction);
 prepare_transaction(#wh_transaction{pvt_code=Code}=Transaction)
-  when ?CODE_DATABASE_ROLLUP =:= Code ->
+  when ?CODE_DATABASE_ROLLUP_DEBIT =:= Code ->
     prepare_rollup_transaction(Transaction);
 prepare_transaction(#wh_transaction{pvt_code=Code}=Transaction)
-  when ?CODE_TOPUP =:= Code ->
+  when ?CODE_TOPUP_DEBIT =:= Code ->
     prepare_topup_transaction(Transaction);
 prepare_transaction(Transaction) ->
     Transaction.
@@ -587,7 +587,7 @@ prepare_transaction(Transaction) ->
 prepare_call_transaction(#wh_transaction{call_id='undefined'}) ->
     {'error', 'call_id_missing'};
 prepare_call_transaction(#wh_transaction{sub_account_id='undefined'
-                                         ,pvt_code=?CODE_SUB_ACCOUNT_PER_MINUTE_CALL
+                                         ,pvt_code=?CODE_SUB_ACCOUNT_PER_MINUTE_CALL_DEBIT
                                         }) ->
     {'error', 'sub_account_id_missing'};
 prepare_call_transaction(#wh_transaction{event='undefined'}) ->
@@ -609,7 +609,7 @@ prepare_feature_activation_transaction(#wh_transaction{feature='undefined'}) ->
 prepare_feature_activation_transaction(#wh_transaction{number='undefined'}) ->
     {'error', 'number_missing'};
 prepare_feature_activation_transaction(#wh_transaction{sub_account_id='undefined'
-                                                       ,pvt_code=?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION
+                                                       ,pvt_code=?CODE_SUB_ACCOUNT_FEATURE_ACTIVATION_DEBIT
                                                       }) ->
     {'error', 'sub_account_id_missing'};
 prepare_feature_activation_transaction(Transaction) ->
@@ -621,7 +621,7 @@ prepare_feature_activation_transaction(Transaction) ->
 prepare_number_activation_transaction(#wh_transaction{number='undefined'}) ->
     {'error', 'number_missing'};
 prepare_number_activation_transaction(#wh_transaction{sub_account_id='undefined'
-                                                      ,pvt_code=?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION
+                                                      ,pvt_code=?CODE_SUB_ACCOUNT_NUMBER_ACTIVATION_DEBIT
                                                      }) ->
     {'error', 'sub_account_id_missing'};
 prepare_number_activation_transaction(Transaction) ->
@@ -633,7 +633,7 @@ prepare_number_activation_transaction(Transaction) ->
 prepare_manual_addition_transaction(#wh_transaction{bookkeeper_info='undefined'}) ->
     {'error', 'bookkeeper_info_missing'};
 prepare_manual_addition_transaction(#wh_transaction{sub_account_id='undefined'
-                                                    ,pvt_code=?CODE_SUB_ACCOUNT_MANUAL_ADDITION
+                                                    ,pvt_code=?CODE_SUB_ACCOUNT_MANUAL_ADDITION_DEBIT
                                                    }) ->
     {'error', 'sub_accuont_id_missing'};
 prepare_manual_addition_transaction(Transaction) ->

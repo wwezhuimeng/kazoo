@@ -199,7 +199,7 @@ charge_transactions(BillingId, Transactions) ->
 
 charge_transactions(BillingId, [], Dict) ->
     dict:fold(
-      fun(Code, JObjs, Acc) when Code =:= ?CODE_TOPUP ->
+      fun(Code, JObjs, Acc) when Code =:= ?CODE_TOPUP_DEBIT ->
               case handle_topup(BillingId, JObjs) of
                   'true' -> Acc;
                   'false' -> JObjs ++ Acc
@@ -239,11 +239,11 @@ handle_topup(BillingId, []) ->
     lager:debug("no top-up transaction found for ~s", [BillingId]),
     'true';
 handle_topup(BillingId, JObjs) ->
-    case already_charged(BillingId, ?CODE_TOPUP) of
+    case already_charged(BillingId, ?CODE_TOPUP_DEBIT) of
         'true' -> 'true';
         'false' ->
             Amount = calculate_amount(JObjs),
-            Props = [{<<"purchase_order">>, ?CODE_TOPUP}],
+            Props = [{<<"purchase_order">>, ?CODE_TOPUP_DEBIT}],
             BT = braintree_transaction:quick_sale(
                    BillingId
                    ,wht_util:units_to_dollars(Amount)
@@ -314,17 +314,28 @@ set_reason(BTTransaction, Transaction) ->
     IsApi = wh_json:is_true(<<"is_api">>, BTTransaction),
     IsAutomatic = wh_json:is_true(<<"is_automatic">>, BTTransaction),
     IsRecurring = wh_json:is_true(<<"is_recurring">>, BTTransaction),
+    IsSale = wh_json:get_ne_value(<<"type">>, BTTransaction) =:= <<"sale">>,
     if
+        IsApi, IsRecurring, IsSale ->
+            wh_transaction:set_reason(<<"recurring_prorate_debit">>, Transaction);
         IsApi, IsRecurring ->
-            wh_transaction:set_reason(<<"recurring_prorate">>, Transaction);
+            wh_transaction:set_reason(<<"recurring_prorate_credit">>, Transaction);
+        IsAutomatic, IsRecurring, IsSale ->
+            wh_transaction:set_reason(<<"monthly_recurring_debit">>, Transaction);
         IsAutomatic, IsRecurring ->
-            wh_transaction:set_reason(<<"monthly_recurring">>, Transaction);
+            wh_transaction:set_reason(<<"monthly_recurring_credit">>, Transaction);
+        IsRecurring, IsSale ->
+            wh_transaction:set_reason(<<"recurring_debit">>, Transaction);
         IsRecurring ->
-            wh_transaction:set_reason(<<"recurring">>, Transaction);
+            wh_transaction:set_reason(<<"recurring_credit">>, Transaction);
+        IsApi, IsSale ->
+            wh_transaction:set_reason(<<"manual_addition_debit">>, Transaction);
         IsApi ->
-            wh_transaction:set_reason(<<"manual_addition">>, Transaction);
+            wh_transaction:set_reason(<<"manual_addition_credit">>, Transaction);
+        IsSale ->
+            wh_transaction:set_reason(<<"unknown_debit">>, Transaction);
         'true' ->
-            wh_transaction:set_reason(<<"unknown">>, Transaction)
+            wh_transaction:set_reason(<<"unknown_credit">>, Transaction)
     end.
 
 -spec set_status(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
@@ -419,9 +430,9 @@ calculate_amount([JObj|JObjs], Amount) ->
 -spec handle_quick_sale_response(bt_transaction()) -> boolean().
 handle_quick_sale_response(BtTransaction) ->
     Transaction = braintree_transaction:record_to_json(BtTransaction),
-    RespCode = wh_json:get_value(<<"processor_response_code">>, Transaction, ?CODE_UNKNOWN),
+    RespCode = wh_json:get_value(<<"processor_response_code">>, Transaction, ?CODE_UNKNOWN_DEBIT),
     % https://www.braintreepayments.com/docs/ruby/reference/processor_responses
-    wh_util:to_integer(RespCode) < 2000.
+    RespCode =/= ?CODE_UNKNOWN_DEBIT andalso wh_util:to_integer(RespCode) < 2000.
 
 %%--------------------------------------------------------------------
 %% @private
