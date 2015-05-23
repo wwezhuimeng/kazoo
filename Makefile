@@ -59,7 +59,7 @@ $(PLT):
 	done
 build-plt: $(PLT)
 
-dialyze: TO_DIALYZE ?= $(shell find $(ROOT)/applications -name ebin -print)
+dialyze: TO_DIALYZE ?= $(shell find $(ROOT)/applications -name ebin -print) $(shell find $(ROOT)/core -name ebin -print)
 dialyze: $(PLT)
 	$(ROOT)/scripts/check-dialyzer.escript $(TO_DIALYZE)
 
