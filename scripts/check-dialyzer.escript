@@ -107,18 +107,19 @@ filter(W) ->
         {warn_matching, {"src/whistle_amqp_maintenance.erl",_}, {pattern_match,["pattern {[Assignment = {'wh_amqp_assignment', {_, _, _}, Consumer, ConsumerRef, 'float', 'undefined', 'undefined', 'undefined', 'undefined', 'undefined', _, _}], Continuation}",_]}} -> 'false';
         {warn_matching, {"src/whistle_amqp_maintenance.erl",_}, {pattern_match,["pattern {[Assignment = {'wh_amqp_assignment', {_, _, _}, Consumer, ConsumerRef, 'sticky', 'undefined', 'undefined', 'undefined', <<_:8/integer-unit:1,_/binary-unit:8>>, 'undefined', _, _}], Continuation}",_]}} -> 'false';
         {warn_matching, {"src/whistle_amqp_maintenance.erl",_}, {pattern_match,["pattern {[Assignment = {'wh_amqp_assignment', {_, _, _}, Consumer, ConsumerRef, _, Channel, ChannelRef, Connection, <<_:8/integer-unit:1,_/binary-unit:8>>, Assigned, _, _}], Continuation}",_]}} -> 'false';
-        {warn_opaque, {"src/whistle_amqp_maintenance.erl",_}, {call_without_opaque,_,_}} -> 'false';
+        {warn_opaque, {"src/whistle_amqp_maintenance.erl",_}, {call_without_opaque,_}} -> 'false';
         {warn_matching, {"src/whistle_amqp_maintenance.erl",_}, {pattern_match,["pattern Assignment = {'wh_amqp_assignment', _, _, _, _, _, _, _, _, _, _, _}","[any()]"]}} -> 'false';
         {warn_matching, {"src/whistle_amqp_maintenance.erl",_}, {pattern_match,["pattern <{[{'wh_amqp_connections', Connection, _, Broker, Available, _, Zone, _, _, _}], Continuation}, PrimaryBroker>",_]}} -> 'false';
         {warn_matching, {"src/whistle_amqp_maintenance.erl",_}, {pattern_match,["pattern {'wh_amqp_assignment', _, _, _, _, _, _, _, _, _, _, _}","[any()]"]}} -> 'false';
         {warn_not_called, {"src/whistle_amqp_maintenance.erl",_}, {unused_fun,[channel_summary_age,1]}} -> 'false';
+        {warn_matching, {"src/wh_amqp_assignments.erl",_},{pattern_match,["pattern {'wh_amqp_assignment', Timestamp, _, _, _, _, _, _, _, _, _, Watchers}","{'error','no_channel'}"]}} -> 'false';
 
         %% More ETS false positives, from applications/
         {warn_matching, {"src/ecallmgr_fs_channels.erl",_}, {pattern_match,["pattern <{[Channel = {'channel', CallId, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}], Continuation}, <<97:8/integer-unit:1,108:8/integer-unit:1,108:8/integer-unit:1>>, Channels>",_]}} -> 'false';
         {warn_matching, {"src/ecallmgr_fs_channels.erl",_}, {pattern_match,["pattern <{[Channel = {'channel', CallId, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}], Continuation}, Fields, Channels>",_]}} -> 'false';
 
         _ ->
-            %% io:format("W = ~p\n", [W]),
+            io:format("W = ~p\n", [W]),
             'true'
     end.
 
