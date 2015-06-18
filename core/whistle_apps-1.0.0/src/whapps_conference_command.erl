@@ -52,7 +52,9 @@ search(Conference) ->
         {_, JObjs} -> conference_search_filter(JObjs, ConferenceId)
     end.
 
--spec conference_search_filter(wh_json:objects(), ne_binary()) -> {'ok', wh_json:object()} | {'error', 'not_found'}.
+-spec conference_search_filter(wh_json:objects(), ne_binary()) ->
+                                      {'ok', wh_json:object()} |
+                                      {'error', 'not_found'}.
 conference_search_filter([], ConferenceId) ->
     lager:info("recieved invalid conference search response for ~s", [ConferenceId]),
     {'error', 'not_found'};
