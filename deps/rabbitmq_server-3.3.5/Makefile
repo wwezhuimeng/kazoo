@@ -24,7 +24,7 @@ QC_MODULES := rabbit_backing_queue_qc
 QC_TRIALS ?= 100
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
-PYTHON=python
+PYTHON=python2
 else
 ifeq ($(shell python2.6 -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python2.6
@@ -33,7 +33,7 @@ ifeq ($(shell python2.5 -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python2.5
 else
 # Hmm. Missing simplejson?
-PYTHON=python
+PYTHON=python2
 endif
 endif
 endif
