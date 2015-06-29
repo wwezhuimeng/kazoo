@@ -609,11 +609,11 @@ find_contact_in_query_resp(JObj) ->
                                     {'ok', wh_json:objects()} |
                                     {'error', any()}.
 query_for_registration(Reg) ->
-    wh_amqp_worker:call_collect(Reg
-                                ,fun wapi_registration:publish_query_req/1
-                                ,{'ecallmgr', fun wapi_registration:query_resp_v/1, 'true'}
-                                ,2 * ?MILLISECONDS_IN_SECOND
-                               ).
+    wh_federation:collect(Reg
+                          ,fun wapi_registration:publish_query_req/1
+                          ,{'ecallmgr', fun wapi_registration:query_resp_v/1, 'true'}
+                          ,2 * ?MILLISECONDS_IN_SECOND
+                          ).
 
 -spec maybe_fetch_original_contact(ne_binary(), ne_binary()) ->
                            {'ok', ne_binary()} |
