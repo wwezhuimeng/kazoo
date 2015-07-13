@@ -26,6 +26,7 @@
          ,device_type/1, device_type/2, set_device_type/2
 
          ,new/0
+         ,is_device/1
         ]).
 
 -include("kz_documents.hrl").
@@ -48,9 +49,15 @@
 -define(LANGUAGE, <<"language">>).
 -define(DEVICE_TYPE, <<"device_type">>).
 
+-define(PVT_TYPE, <<"device">>).
+
 -spec new() -> doc().
 new() ->
     wh_json:new().
+
+-spec is_device(doc() | wh_json:object()) -> boolean().
+is_device(Doc) ->
+    wh_doc:type(Doc) =:= ?PVT_TYPE.
 
 -spec sip_username(doc()) -> api_binary().
 -spec sip_username(doc(), Default) -> ne_binary() | Default.
