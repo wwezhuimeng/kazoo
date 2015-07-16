@@ -219,4 +219,5 @@ update_audit_log(Services
                         ,{<<"account_name">>, wh_services:account_name(AccountId)}
                        ])
                     ),
+    lager:debug("adding audit log details for account ~s", [AccountId]),
     kzd_audit_log:set_audit_account(AuditLog, AccountId, AccountAudit).
