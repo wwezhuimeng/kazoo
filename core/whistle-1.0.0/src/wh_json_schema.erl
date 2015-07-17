@@ -112,7 +112,8 @@ maybe_add_default(Key, Default, JObj) ->
 validate(SchemaJObj, DataJObj) ->
     validate(SchemaJObj, DataJObj, [{'schema_loader_fun', fun load/1}]).
 validate(<<_/binary>> = Schema, DataJObj, Options) ->
-    {'ok', SchemaJObj} = load(Schema),
+    F = props:get_value('schema_loader_fun', Options, fun load/1),
+    {'ok', SchemaJObj} = F(Schema),
     validate(SchemaJObj, DataJObj, Options);
 validate(SchemaJObj, DataJObj, Options) ->
     jesse:validate_with_schema(SchemaJObj, DataJObj, Options).
