@@ -12,6 +12,9 @@
 -define(CAT, <<"phone_numbers">>).
 -define(ITEM, <<"did_us">>).
 
+-define(USER_CAT, <<"users">>).
+-define(USER_ITEM, <<"user">>).
+
 -record(state, {service_plan_jobj :: kzd_service_plan:plan()
                 ,services :: wh_services:services()
                 ,services_jobj :: wh_json:object()
@@ -28,7 +31,7 @@ services_test_() ->
        ,fun services_record_to_json/1
        ,fun service_plan_json_to_plans/1
        ,fun increase_quantities/1
-       ,fun dry_run_calculations/1
+       ,fun user_additions/1
       ]
     }.
 
@@ -249,16 +252,30 @@ category_quantities(CurrentServices, UpdatedServices, Increment) ->
       }
     ].
 
-dry_run_calculations(#state{services=Services
-                            ,service_plan_jobj=_ServicePlan
-                           }) ->
-    ItemQuantity = wh_services:quantity(?CAT, ?ITEM, Services),
-    UpdatedServices = wh_services:update(?CAT, ?ITEM, ItemQuantity+1, Services),
+user_additions(#state{services=Services
+                      ,service_plan_jobj=_ServicePlan
+                     }) ->
+    ItemQuantity = wh_services:quantity(?USER_CAT, ?USER_ITEM, Services),
+    UpdatedServices = wh_services:update(?USER_CAT, ?USER_ITEM, ItemQuantity+2, Services),
 
-    DryRun = wh_services:dry_run(UpdatedServices),
+    ServiceJObj = wh_services:to_json(Services),
+    ServicePlans = wh_service_plans:from_service_json(ServiceJObj),
+    UpdatedServiceJObj = wh_services:to_json(UpdatedServices),
+
+    ExistingItems = wh_service_plans:create_items(ServiceJObj, ServicePlans),
+    UpdatedItems = wh_service_plans:create_items(UpdatedServiceJObj, ServicePlans),
+    Changed = wh_service_items:get_updated_items(UpdatedItems, ExistingItems),
+
+    ActivationCharges = wh_services:dry_run_activation_charges(UpdatedServices),
+    PlanCharges = wh_service_items:public_json(Changed),
+
+    DryRun = wh_services:calculate_transactions_charges(PlanCharges, ActivationCharges),
     ?debugFmt("dry run: ~p~n", [DryRun]),
 
-    [{"Verify activation charge for phone_numbers.did_us"
-      ,?_assertEqual(2.0, wh_services:activation_charges(?CAT, ?ITEM, Services))
+    [{"Verify quantity changed"
+      ,?_assertEqual(2, wh_json:get_integer_value([?USER_CAT, ?USER_ITEM, <<"quantity">>], DryRun))
      }
+     ,{"Verify rate"
+       ,?_assertEqual(5.0, wh_json:get_float_value([?USER_CAT, ?USER_ITEM, <<"rate">>], DryRun))
+      }
     ].
