@@ -59,6 +59,12 @@
 
 -export([dry_run/1]).
 
+-ifdef(TEST).
+-export([calculate_transactions_charges/2
+         ,dry_run_activation_charges/1
+        ]).
+-endif.
+
 -include("whistle_services.hrl").
 
 -define(STATUS_GOOD, kzd_services:status_good()).
@@ -1012,11 +1018,11 @@ dry_run(Services) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_charges(services(), wh_json:objects()) -> wh_json:object().
-calculate_charges(Services, JObjs) ->
+calculate_charges(Services, ActivationCharges) ->
     case calculate_services_charges(Services) of
         {'no_plan', _NP} -> wh_json:new();
         {'ok', PlansCharges} ->
-            calculate_transactions_charges(PlansCharges, JObjs)
+            calculate_transactions_charges(PlansCharges, ActivationCharges)
     end.
 
 %%--------------------------------------------------------------------
@@ -1088,15 +1094,15 @@ apply_cascade_categories(CategoryId, ItemsJObj, CascadeQuantities) ->
 %%--------------------------------------------------------------------
 -spec calculate_transactions_charges(wh_json:object(), wh_json:objects()) ->
                                             wh_json:object().
-calculate_transactions_charges(PlansCharges, JObjs) ->
+calculate_transactions_charges(PlansCharges, ActivationCharges) ->
     F = fun calculate_transactions_charge_fold/2,
-    lists:foldl(F, PlansCharges, JObjs).
+    lists:foldl(F, PlansCharges, ActivationCharges).
 
 -spec calculate_transactions_charge_fold(wh_json:object(), wh_json:object()) ->
                                                 wh_json:object().
-calculate_transactions_charge_fold(JObj, PlanCharges) ->
-    Amount = wh_json:get_value(<<"amount">>, JObj, 0),
-    Quantity = wh_json:get_value(<<"quantity">>, JObj, 0),
+calculate_transactions_charge_fold(ActivationCharge, PlanCharges) ->
+    Amount = wh_json:get_value(<<"amount">>, ActivationCharge, 0),
+    Quantity = wh_json:get_value(<<"quantity">>, ActivationCharge, 0),
     SubTotal = wh_json:get_value(<<"activation_charges">>, PlanCharges, 0),
 
     case SubTotal + (Amount * Quantity) of
@@ -1104,8 +1110,8 @@ calculate_transactions_charge_fold(JObj, PlanCharges) ->
             %% Works for 0.0 and 0. May compare to a threshold though…
             PlanCharges;
         Total ->
-            CategoryId = wh_json:get_value(<<"category">>, JObj),
-            ItemId = wh_json:get_value(<<"item">>, JObj),
+            CategoryId = wh_json:get_value(<<"category">>, ActivationCharge),
+            ItemId = wh_json:get_value(<<"item">>, ActivationCharge),
             Props = [{<<"activation_charges">>, Total}
                      ,{[CategoryId, ItemId, <<"activation_charges">>], Amount}
                     ],
