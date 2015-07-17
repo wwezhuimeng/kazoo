@@ -90,6 +90,7 @@
         },
         "phone_numbers": {
             "did_us": {
+                "activation_charge": 2,
                 "cascade": false,
                 "discounts": {
                     "cumulative": {
