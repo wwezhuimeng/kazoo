@@ -45,7 +45,9 @@
          ,diff_quantity/3
          ,have_quantities_changed/1
         ]).
--export([updated_quantity/3]).
+-export([updated_quantity/3
+         ,updated_quantities/1, updated_quantities/2
+        ]).
 -export([category_quantity/2, category_quantity/3]).
 -export([cascade_quantity/3, cascade_quantities/1]).
 -export([cascade_category_quantity/2, cascade_category_quantity/3]).
@@ -508,8 +510,8 @@ activation_charges(CategoryId, ItemId, <<_/binary>> = Account) ->
 commit_transactions(#wh_services{billing_id=BillingId}, Activations) ->
     Bookkeeper = select_bookkeeper(BillingId),
     Transactions = [Activation
-                    || Activation <- Activations
-                           ,wh_transaction:amount(Activation) > 0
+                    || Activation <- Activations,
+                       wh_transaction:amount(Activation) > 0
                    ],
     Bookkeeper:commit_transactions(BillingId, Transactions).
 
@@ -876,6 +878,13 @@ diff_quantity(CategoryId, ItemId, #wh_services{jobj=JObj
 updated_quantity(_, _, #wh_services{deleted='true'}) -> 0;
 updated_quantity(CategoryId, ItemId, #wh_services{updates=JObj}) ->
     wh_json:get_integer_value([CategoryId, ItemId], JObj, 0).
+
+updated_quantities(_, #wh_services{deleted='true'}) -> wh_json:new();
+updated_quantities(CategoryId, #wh_services{updates=JObj}) ->
+    wh_json:get_value(CategoryId, JObj, wh_json:new()).
+
+updated_quantities(#wh_services{deleted='true'}) -> wh_json:new();
+updated_quantities(#wh_services{updates=JObj}) -> JObj.
 
 %%--------------------------------------------------------------------
 %% @public
