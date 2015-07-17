@@ -162,7 +162,9 @@ service_plan_schema_check(#state{service_plan_jobj=ServicePlan
     {"checking service plan fixture against schema"
      ,try wh_json_schema:validate(<<"service_plans">>, ServicePlan, [{'schema_loader_fun', F}]) of
           {'ok', _} -> ?_assert('true');
-          {'error', _E} -> ?_assert('false')
+          {'error', _E} ->
+              ?debugFmt("schema errors: ~p~n", [_E]),
+              ?_assert('false')
       catch
           'error':_E ->
               ST = erlang:get_stacktrace(),
