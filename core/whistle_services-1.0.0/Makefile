@@ -8,7 +8,9 @@ PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
 TEST_EBINS = $(shell find $(ROOT)/core/whistle-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/core/whistle_couch-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/core/kazoo_documents-* -maxdepth 2 -name ebin -print) \
-	$(shell find $(ROOT)/deps/ejson-* -maxdepth 2 -name ebin -print)
+	$(shell find $(ROOT)/applications/crossbar -maxdepth 2 -name ebin -print) \
+	$(shell find $(ROOT)/deps/ejson-* -maxdepth 2 -name ebin -print) \
+	$(shell find $(ROOT)/deps/jesse-* -maxdepth 2 -name ebin -print)
 TEST_PA = $(foreach TEST_EBIN,$(TEST_EBINS),-pa $(TEST_EBIN))
 
 ERLC_OPTS = -Werror +debug_info +warn_export_all $(PA)
