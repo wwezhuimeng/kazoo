@@ -5,7 +5,6 @@
     "name": "Service Plan",
     "patternProperties": {
         ".+": {
-            "type": "object",
             "description": "The category of things in the service plan",
             "patternProperties": {
                 ".+": {
@@ -20,13 +19,16 @@
                     "properties": {
                         "exceptions": {
                             "description": "List of item names that are excluded being counted",
-                            "items":{"type":"string"},
+                            "items": {
+                                "type": "string"
+                            },
                             "type": "array"
                         }
                     },
                     "type": "object"
                 }
-            }
+            },
+            "type": "object"
         }
     },
     "required": true,
