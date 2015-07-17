@@ -40,7 +40,7 @@
          ,services_json/1
         ]).
 -export([is_dirty/1]).
--export([quantity/3
+-export([quantity/3, quantity/4
          ,diff_quantities/1, diff_quantities/2
          ,diff_quantity/3
          ,have_quantities_changed/1
@@ -48,7 +48,7 @@
 -export([updated_quantity/3
          ,updated_quantities/1, updated_quantities/2
         ]).
--export([category_quantity/2, category_quantity/3]).
+-export([category_quantity/2, category_quantity/3, category_quantity/4]).
 -export([cascade_quantity/3, cascade_quantities/1]).
 -export([cascade_category_quantity/2, cascade_category_quantity/3]).
 -export([reset_category/2]).
@@ -75,7 +75,7 @@
                       ,status = ?STATUS_GOOD :: ne_binary()
                       ,jobj = wh_json:new() :: wh_json:object()
                       ,updates = wh_json:new() :: wh_json:object()
-                      ,cascade_quantities = wh_json:new() :: wh_json:object()
+                      ,cascade_quantities :: api_object()
                      }).
 -define(BASE_BACKOFF, 50).
 
@@ -156,7 +156,7 @@ base_service_object(AccountId, AccountJObj) ->
 from_service_json(JObj) ->
     from_service_json(JObj, 'true').
 
-from_service_json(JObj, CalcUpdates) ->
+from_service_json(JObj, ShouldCalcUpdates) ->
     AccountId = wh_doc:account_id(JObj),
     BillingId = kzd_services:billing_id(JObj, AccountId),
 
@@ -168,12 +168,12 @@ from_service_json(JObj, CalcUpdates) ->
                             ,deleted = wh_doc:is_soft_deleted(JObj)
                             ,dirty = kzd_services:is_dirty(JObj)
                            },
-    maybe_calc_updates(Services, CalcUpdates).
+    maybe_calc_updates(Services, ShouldCalcUpdates).
 
-maybe_calc_updates(Services, 'true') ->
+maybe_calc_updates(#wh_services{cascade_quantities='undefined'}=Services, 'true') ->
     Qs = cascade_quantities(account_id(Services), is_reseller(Services)),
     Services#wh_services{cascade_quantities = Qs};
-maybe_calc_updates(Services, 'false') ->
+maybe_calc_updates(Services, _ShouldCalcUpdates) ->
     Services.
 
 %%--------------------------------------------------------------------
@@ -566,6 +566,8 @@ service_plan_json(<<_/binary>> = Account) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec public_json(ne_binary() | services()) -> wh_json:object().
+public_json(#wh_services{cascade_quantities='undefined'}=Services) ->
+    public_json(Services#wh_services{cascade_quantities=cascade_quantities(Services)});
 public_json(#wh_services{jobj=ServicesJObj
                          ,cascade_quantities=CascadeQuantities
                         }) ->
@@ -807,10 +809,14 @@ is_dirty(#wh_services{dirty=IsDirty}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec quantity(ne_binary(), ne_binary(), services()) -> integer().
+-spec quantity(ne_binary(), ne_binary(), kzd_services:doc(), wh_json:object()) -> integer().
 quantity(_, _, #wh_services{deleted='true'}) -> 0;
 quantity(CategoryId, ItemId, #wh_services{updates=Updates
                                           ,jobj=JObj
                                          }) ->
+    quantity(CategoryId, ItemId, JObj, Updates).
+
+quantity(CategoryId, ItemId, JObj, Updates) ->
     ItemQuantity = kzd_services:item_quantity(JObj, CategoryId, ItemId),
     wh_json:get_integer_value([CategoryId, ItemId], Updates, ItemQuantity).
 
@@ -894,6 +900,7 @@ updated_quantities(#wh_services{updates=JObj}) -> JObj.
 %%--------------------------------------------------------------------
 -spec category_quantity(ne_binary(), services()) -> integer().
 -spec category_quantity(ne_binary(), ne_binaries(), services()) -> integer().
+-spec category_quantity(ne_binary(), ne_binaries(), kzd_services:doc(), wh_json:object()) -> integer().
 category_quantity(CategoryId, Services) ->
     category_quantity(CategoryId, [], Services).
 
@@ -901,6 +908,9 @@ category_quantity(_CategoryId, _ItemExceptions, #wh_services{deleted='true'}) ->
 category_quantity(CategoryId, ItemExceptions, #wh_services{updates=UpdatedQuantities
                                                            ,jobj=JObj
                                                           }) ->
+    category_quantity(CategoryId, ItemExceptions, JObj, UpdatedQuantities).
+
+category_quantity(CategoryId, ItemExceptions, JObj, UpdatedQuantities) ->
     CatQuantities = kzd_services:category_quantities(JObj, CategoryId),
     CatUpdates = wh_json:get_value(CategoryId, UpdatedQuantities, wh_json:new()),
 
@@ -941,6 +951,11 @@ cascade_category_quantity(CategoryId, Services) ->
     cascade_category_quantity(CategoryId, [], Services).
 
 cascade_category_quantity(_, _, #wh_services{deleted='true'}) -> 0;
+cascade_category_quantity(CategoryId, ItemExceptions, #wh_services{cascade_quantities='undefined'}=Services) ->
+    cascade_category_quantity(CategoryId
+                              ,ItemExceptions
+                              ,Services#wh_services{cascade_quantities=cascade_quantities(Services)}
+                             );
 cascade_category_quantity(CategoryId, ItemExceptions, #wh_services{cascade_quantities=Quantities}=Services) ->
     CatQuantiies = wh_json:get_value(CategoryId, Quantities, wh_json:new()),
     QtysMinusEx = wh_json:delete_keys(ItemExceptions, CatQuantiies),
@@ -1020,6 +1035,10 @@ calculate_services_charges(#wh_services{jobj=ServiceJObj}=Services) ->
             calculate_services_charges(Services, ServicePlans)
     end.
 
+calculate_services_charges(#wh_services{cascade_quantities='undefined'}=Services, ServicePlans) ->
+    calculate_services_charges(Services#wh_services{cascade_quantities=cascade_quantities(Services)}
+                               ,ServicePlans
+                              );
 calculate_services_charges(#wh_services{jobj=ServiceJObj
                                         ,updates=UpdatesJObj
                                         ,cascade_quantities=CascadeQuantities
@@ -1212,6 +1231,8 @@ get_service_module(Module) ->
 -spec cascade_quantities(services()) -> wh_json:object().
 -spec cascade_quantities(ne_binary(), boolean()) -> wh_json:object().
 
+cascade_quantities(#wh_services{cascade_quantities='undefined'}) ->
+    wh_json:new();
 cascade_quantities(#wh_services{cascade_quantities=JObj}) ->
     JObj.
 

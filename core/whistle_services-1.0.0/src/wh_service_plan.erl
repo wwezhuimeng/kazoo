@@ -52,28 +52,28 @@ activation_charges(CategoryId, ItemId, ServicePlan) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_items(kzd_service_plan:doc(), wh_service_items:items(), wh_services:services()) ->
+-spec create_items(kzd_service_plan:doc(), wh_service_items:items(), kzd_services:doc()) ->
                           wh_service_items:items().
--spec create_items(kzd_service_plan:doc(), wh_service_items:items(), wh_services:services()
+-spec create_items(kzd_service_plan:doc(), wh_service_items:items(), kzd_services:doc()
                    ,ne_binary(), ne_binary()
                   ) ->
                           wh_service_items:items().
-create_items(ServicePlan, ServiceItems, Services) ->
+create_items(ServicePlan, ServiceItems, ServicesJObj) ->
     Plans = [{CategoryId, ItemId}
              || CategoryId <- kzd_service_plan:categories(ServicePlan),
                 ItemId <- kzd_service_plan:items(ServicePlan, CategoryId)
             ],
     lists:foldl(fun({CategoryId, ItemId}, SIs) ->
-                        create_items(ServicePlan, SIs, Services, CategoryId, ItemId)
+                        create_items(ServicePlan, SIs, ServicesJObj, CategoryId, ItemId)
                 end
                 ,ServiceItems
                 ,Plans
                ).
 
-create_items(ServicePlan, ServiceItems, Services, CategoryId, ItemId) ->
+create_items(ServicePlan, ServiceItems, ServicesJObj, CategoryId, ItemId) ->
     ItemPlan = kzd_service_plan:item(ServicePlan, CategoryId, ItemId),
 
-    {Rate, Quantity} = get_rate_at_quantity(CategoryId, ItemId, ItemPlan, Services),
+    {Rate, Quantity} = get_rate_at_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj),
     lager:debug("for ~s/~s, found rate ~p for quantity ~p", [CategoryId, ItemId, Rate, Quantity]),
 
     %% allow service plans to re-map item names (IE: softphone items "as" sip_device)
@@ -180,10 +180,10 @@ bookkeeper_jobj(CategoryId, ItemId, ServicePlan) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_rate_at_quantity(ne_binary(), ne_binary(), kzd_service_plan:doc(), wh_services:services()) ->
+-spec get_rate_at_quantity(ne_binary(), ne_binary(), kzd_service_plan:doc(), kzd_services:doc()) ->
                                   {float(), integer()}.
-get_rate_at_quantity(CategoryId, ItemId, ItemPlan, Services) ->
-    Quantity = get_quantity(CategoryId, ItemId, ItemPlan, Services),
+get_rate_at_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj) ->
+    Quantity = get_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj),
     case get_flat_rate(Quantity, ItemPlan) of
         'undefined' -> {get_quantity_rate(Quantity, ItemPlan), Quantity};
         FlatRate -> {FlatRate, 1}
@@ -196,9 +196,9 @@ get_rate_at_quantity(CategoryId, ItemId, ItemPlan, Services) ->
 %% current quantity.
 %% @end
 %%--------------------------------------------------------------------
--spec get_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), wh_services:services()) -> integer().
-get_quantity(CategoryId, ItemId, ItemPlan, Services) ->
-    ItemQuantity = get_item_quantity(CategoryId, ItemId, ItemPlan, Services),
+-spec get_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), kzd_services:doc()) -> integer().
+get_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj) ->
+    ItemQuantity = get_item_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj),
     case kzd_item_plan:minimum(ItemPlan) of
         Min when Min > ItemQuantity ->
             lager:debug("minimum '~s/~s' not met with ~p, enforcing quantity ~p"
@@ -253,27 +253,29 @@ get_quantity_rate(Quantity, ItemPlan) ->
 %% summation.
 %% @end
 %%--------------------------------------------------------------------
--spec get_item_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), wh_services:services()) ->
+-spec get_item_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), kzd_services:doc()) ->
                                integer().
--spec get_item_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), wh_services:services(), ne_binary()) ->
+-spec get_item_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), kzd_services:doc(), ne_binary()) ->
                                integer().
 
-get_item_quantity(CategoryId, ItemId, ItemPlan, Services) ->
-    get_item_quantity(CategoryId, ItemId, ItemPlan, Services, kzd_service_plan:all_items_key()).
+get_item_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj) ->
+    get_item_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj, kzd_service_plan:all_items_key()).
 
-get_item_quantity(CategoryId, AllItems, ItemPlan, Services, AllItems) ->
+get_item_quantity(CategoryId, AllItems, ItemPlan, ServicesJObj, AllItems) ->
     Exceptions = kzd_item_plan:exceptions(ItemPlan),
 
     case kzd_item_plan:should_cascade(ItemPlan) of
-        'false' -> wh_services:category_quantity(CategoryId, Exceptions, Services);
+        'false' -> wh_services:category_quantity(CategoryId, Exceptions, ServicesJObj, wh_json:new());
         'true' ->
             lager:debug("collecting '~s' as a cascaded sum", [CategoryId]),
+            Services = wh_services:from_service_json(ServicesJObj),
             wh_services:cascade_category_quantity(CategoryId, Exceptions, Services)
     end;
-get_item_quantity(CategoryId, ItemId, ItemPlan, Services, _AllItems) ->
+get_item_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj, _AllItems) ->
     case kzd_item_plan:should_cascade(ItemPlan) of
-        'false' -> wh_services:quantity(CategoryId, ItemId, Services);
+        'false' -> wh_services:quantity(CategoryId, ItemId, ServicesJObj, wh_json:new());
         'true' ->
             lager:debug("collecting '~s/~s' as a cascaded quantity", [CategoryId, ItemId]),
+            Services = wh_services:from_service_json(ServicesJObj),
             wh_services:cascade_quantity(CategoryId, ItemId, Services)
     end.
