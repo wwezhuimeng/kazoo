@@ -43,6 +43,10 @@
         "phone_numbers": {
             "did_us": 9,
             "tollfree_us": 1
+        },
+        "users": {
+            "admin": 0,
+            "user": 0
         }
     }
 }

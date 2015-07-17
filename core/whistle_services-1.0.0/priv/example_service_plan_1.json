@@ -49,7 +49,6 @@
         "devices": {
             "_all": {
                 "as": "sip_devices",
-                "cascade": true,
                 "name": "SIP Device",
                 "rates": {
                     "100": 149.95,
@@ -102,7 +101,6 @@
                 "rate": 1
             },
             "tollfree_us": {
-                "cascade": true,
                 "minimum": 10,
                 "name": "US Tollfree",
                 "rate": 5
@@ -110,7 +108,7 @@
         },
         "users": {
             "_all": {
-                "as": "users",
+                "as": "user",
                 "exceptions": [
                     "admins"
                 ],
@@ -118,7 +116,7 @@
                 "rates": {
                     "100": 149.95,
                     "20": 24.95,
-                    "5": 0,
+                    "5": 5.0,
                     "50": 49.95
                 }
             }
