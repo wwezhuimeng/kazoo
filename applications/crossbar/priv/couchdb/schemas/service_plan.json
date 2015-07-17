@@ -1,0 +1,34 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "service_plan",
+    "description": "Describes a service plan for services offered to accounts",
+    "name": "Service Plan",
+    "patternProperties": {
+        ".+": {
+            "description": "The category of things in the service plan",
+            "patternProperties": {
+                ".+": {
+                    "$ref": "service_plan_items",
+                    "description": "The item of interest in the category",
+                    "type": "object"
+                },
+                "properties": {
+                    "_all": {
+                        "description": "Plan information applied to all items within the category",
+                        "properties": {
+                            "exceptions": {
+                                "description": "List of item names that are excluded being counted",
+                                "items": "string",
+                                "type": "array"
+                            }
+                        },
+                        "type": "object"
+                    }
+                }
+            },
+            "type": "object"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

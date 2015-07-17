@@ -1,0 +1,68 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "service_plan_items",
+    "name": "Service Plan Items",
+    "properties": {
+        "activation_charge": {
+            "description": "The charge for activating a new instance of the item",
+            "type": "number"
+        },
+        "as": {
+            "description": "When calculating totals, masquerade the item as another item name",
+            "type": "string"
+        },
+        "cascade": {
+            "description": "When calculating totals, should this item's total include sub-accounts' totals as well",
+            "type": "boolean"
+        },
+        "discounts": {
+            "description": "Quantity discounts available",
+            "properties": {
+                "cumulative": {
+                    "description": "Discounts to apply to a subset of the item",
+                    "properties": {
+                        "maximum": {
+                            "description": "The max total quantity this discount applies to",
+                            "type": "integer"
+                        },
+                        "rate": {
+                            "description": "The discounted rate, in currency, charged per-item",
+                            "type": "number"
+                        }
+                    },
+                    "type": "object"
+                },
+                "single": {
+                    "description": "Discounts to apply to the account for this item",
+                    "properties": {
+                        "rate": {
+                            "description": "The discounted rate, in currency, charged per-item",
+                            "type": "number"
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "name": {
+            "description": "The name of the item",
+            "type": "string"
+        },
+        "rate": {
+            "description": "The rate, in currency, charged per-item",
+            "type": "number"
+        },
+        "rates": {
+            "description": "A mapping of rates for given quantities of this item",
+            "patternProperties": {
+                "\\d+": {
+                    "description": "The rate, in currency, charged for the item, up to the quantity in the key",
+                    "type": "number"
+                }
+            },
+            "type": "object"
+        }
+    },
+    "type": "object"
+}
