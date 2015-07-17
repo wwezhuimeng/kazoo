@@ -153,13 +153,12 @@ create_items(ServiceJObj) ->
     end.
 
 create_items(ServiceJObj, ServicePlans) ->
-    Services = wh_services:from_service_json(ServiceJObj),
     Plans = [Plan
              || #wh_service_plans{plans=Plans} <- ServicePlans,
                 Plan <- Plans
             ],
     lists:foldl(fun(Plan, Items) ->
-                        wh_service_plan:create_items(Plan, Items, Services)
+                        wh_service_plan:create_items(Plan, Items, ServiceJObj)
                 end
                 ,wh_service_items:empty()
                 ,Plans
