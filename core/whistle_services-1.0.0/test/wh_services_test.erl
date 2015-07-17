@@ -54,14 +54,15 @@ read_service_plan(State) ->
 read_services(#state{service_plan_jobj=ServicePlan}=State) ->
     ServicesPath = filename:join([priv_dir(), "example_account_services.json"]),
 
-    JObj = read_json(ServicesPath),
+    ServicesJObj = read_json(ServicesPath),
+    ServicesWithPlanJObj = kzd_services:set_plan_doc(ServicesJObj, wh_doc:id(ServicePlan), ServicePlan),
 
-    Services = wh_services:from_service_json(JObj, 'false'),
+    Services = wh_services:from_service_json(ServicesWithPlanJObj, 'false'),
 
-    Overrides = kzd_services:plan_overrides(JObj, wh_doc:id(ServicePlan)),
+    Overrides = kzd_services:plan_overrides(ServicesWithPlanJObj, wh_doc:id(ServicePlan)),
     AccountPlan = kzd_service_plan:merge_overrides(ServicePlan, Overrides),
 
-    State#state{services_jobj=JObj
+    State#state{services_jobj=ServicesWithPlanJObj
                 ,services=Services
                 ,account_plan=AccountPlan
                }.
@@ -199,9 +200,7 @@ cumulative_discount(Item) ->
 rate(JObj) ->
     wh_json:get_float_value(<<"rate">>, JObj).
 
-increase_quantities(#state{account_plan=_AccountPlan
-                           ,services=Services
-                          }) ->
+increase_quantities(#state{services=Services}=State) ->
     ItemQuantity = wh_services:quantity(?CAT, ?ITEM, Services),
 
     random:seed(os:timestamp()),
@@ -223,6 +222,7 @@ increase_quantities(#state{account_plan=_AccountPlan
        ,?_assertEqual(Increment, DiffItemQuantity)
       }
      | category_quantities(Services, UpdatedServices, Increment)
+     ++ service_plan_items(State, UpdatedServices, Increment)
     ].
 
 category_quantities(CurrentServices, UpdatedServices, Increment) ->
@@ -248,3 +248,17 @@ category_quantities(CurrentServices, UpdatedServices, Increment) ->
        ,?_assertEqual(MinusDIDUS, UpdatedCategoryQuantity-DIDUSQuantity)
       }
     ].
+
+service_plan_items(#state{service_plan_jobj=ServicePlan}
+                   ,UpdatedServices
+                   ,_Increment
+                  ) ->
+    ServicesJObj = wh_services:to_json(UpdatedServices),
+    ?debugFmt("plan ids: ~p~n", [kzd_services:plan_ids(ServicesJObj)]),
+    ?debugFmt("reseller id: ~p~n", [kzd_services:reseller_id(ServicesJObj)]),
+    ?debugFmt("vendor id: ~p~n", [kzd_services:plan_account_id(ServicesJObj, wh_doc:id(ServicePlan))]),
+
+    ?debugFmt("plan doc: ~p~n", [kzd_services:plan_doc(ServicesJObj, wh_doc:id(ServicePlan))]),
+    Items = wh_service_plans:public_json_items(ServicesJObj),
+    ?debugFmt("items: ~p~n", [Items]),
+    [].
