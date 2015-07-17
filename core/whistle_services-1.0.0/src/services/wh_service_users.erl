@@ -38,7 +38,10 @@ reconcile(Services) ->
                                 Item = wh_json:get_value(<<"key">>, JObj),
                                 Quantity = wh_json:get_integer_value(<<"value">>, JObj, 0),
                                 wh_services:update(?SERVICE_CATEGORY, Item, Quantity, S)
-                        end, wh_services:reset_category(?SERVICE_CATEGORY, Services), JObjs)
+                        end
+                        ,wh_services:reset_category(?SERVICE_CATEGORY, Services)
+                        ,JObjs
+                       )
     end.
 
 reconcile(Services, 'undefined') -> Services;
