@@ -22,7 +22,8 @@ services_test_() ->
     {'foreach'
      ,fun init/0
      ,fun stop/1
-     ,[fun services_json_to_record/1
+     ,[fun service_plan_schema_check/1
+       ,fun services_json_to_record/1
        ,fun services_record_to_json/1
        ,fun service_plan_json_to_plans/1
        ,fun increase_quantities/1
@@ -64,8 +65,12 @@ read_services(#state{service_plan_jobj=ServicePlan}=State) ->
                }.
 
 priv_dir() ->
-    {'ok', AppDir} = file:get_cwd(),
-    filename:join([AppDir, "priv"]).
+    case code:priv_dir('whistle_services') of
+        Path when is_list(Path) -> Path;
+        _ ->
+            {'ok', AppDir} = file:get_cwd(),
+            filename:join([AppDir, "priv"])
+    end.
 
 read_json(Path) ->
     {'ok', JSON} = file:read_file(Path),
@@ -137,6 +142,16 @@ item_check(Category, Item, Quantity, Services) ->
      ,?_assertEqual(Quantity, wh_services:quantity(Category, Item, Services))
     }.
 
+service_plan_schema_check(#state{service_plan_jobj=ServicePlan}) ->
+
+
+    {"checking service plan fixture against schema"
+     ,case wh_json_schema:validate(<<"service_plans">>, ServicePlan) of
+          {'ok', _} -> ?_assert('true');
+          {'error', _E} -> ?_assert('false')
+      end
+    }.
+
 service_plan_json_to_plans(#state{service_plan_jobj=ServicePlan
                                   ,account_plan=AccountPlan
                                  }) ->
@@ -187,6 +202,7 @@ increase_quantities(#state{account_plan=_AccountPlan
        ,?_assertEqual(Increment, DiffItemQuantity)
       }
      | category_quantities(Services, UpdatedServices, Increment)
+     ++ dry_run_charges(UpdatedServices, Increment)
     ].
 
 category_quantities(CurrentServices, UpdatedServices, Increment) ->
@@ -212,3 +228,9 @@ category_quantities(CurrentServices, UpdatedServices, Increment) ->
        ,?_assertEqual(MinusDIDUS, UpdatedCategoryQuantity-DIDUSQuantity)
       }
     ].
+
+dry_run_charges(Services, _Increment) ->
+    DryRunCharges = wh_services:dry_run(Services),
+    ?debugFmt("dry run: ~p~n", [DryRunCharges]),
+    ?debugFmt("services: ~p~n", [wh_services:updated_quantities(Services)]),
+    [].
