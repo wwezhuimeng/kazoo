@@ -19,6 +19,7 @@
 
          ,plans/1, plans/2, plan_ids/1
          ,plan/2, plan/3
+         ,plan_doc/2, plan_doc/3
          ,plan_account_id/2, plan_account_id/3
          ,plan_overrides/2, plan_overrides/3
          ,quantities/1, quantities/2
@@ -35,6 +36,7 @@
          ,set_type/1
          ,set_plans/2
          ,set_plan/3
+         ,set_plan_doc/3
          ,set_quantities/2
         ]).
 
@@ -45,13 +47,15 @@
 
 -define(BILLING_ID, <<"billing_id">>).
 -define(IS_RESELLER, <<"pvt_reseller">>).
--define(RESELLER_ID, <<"pvt_reseller_id">>).
+-define(PVT_RESELLER_ID, <<"pvt_reseller_id">>).
+-define(RESELLER_ID, <<"reseller_id">>).
 -define(IS_DIRTY, <<"pvt_dirty">>).
 -define(STATUS, <<"pvt_status">>).
 -define(STATUS_GOOD, <<"good_standing">>).
 -define(TREE, <<"pvt_tree">>).
 -define(TYPE, <<"service">>).
 -define(PLANS, <<"plans">>).
+-define(PLAN_DOC, <<"doc">>).
 -define(QUANTITIES, <<"quantities">>).
 
 -spec billing_id(doc()) -> api_binary().
@@ -77,7 +81,7 @@ is_reseller(JObj, Default) ->
 reseller_id(JObj) ->
     reseller_id(JObj, 'undefined').
 reseller_id(JObj, Default) ->
-    wh_json:get_value(?RESELLER_ID, JObj, Default).
+    wh_json:get_first_defined([?PVT_RESELLER_ID, ?RESELLER_ID], JObj, Default).
 
 -spec is_dirty(doc()) -> boolean().
 -spec is_dirty(doc(), Default) -> boolean() | Default.
@@ -126,6 +130,13 @@ plan(JObj, PlanId) ->
 plan(JObj, PlanId, Default) ->
     wh_json:get_json_value([?PLANS, PlanId], JObj, Default).
 
+-spec plan_doc(doc(), ne_binary()) -> kzd_service_plan:doc() | 'undefined'.
+-spec plan_doc(doc(), ne_binary(), Default) -> kzd_service_plan:doc() | Default.
+plan_doc(JObj, PlanId) ->
+    plan_doc(JObj, PlanId, 'undefined').
+plan_doc(JObj, PlanId, Default) ->
+    wh_json:get_json_value([?PLANS, PlanId, ?PLAN_DOC], JObj, Default).
+
 -spec plan_account_id(doc(), ne_binary()) -> api_binary().
 -spec plan_account_id(doc(), ne_binary(), Default) -> api_binary() | Default.
 plan_account_id(JObj, PlanId) ->
@@ -167,7 +178,7 @@ set_is_reseller(JObj, IsReseller) ->
 
 -spec set_reseller_id(doc(), api_binary()) -> doc().
 set_reseller_id(JObj, ResellerId) ->
-    wh_json:set_value(?RESELLER_ID, ResellerId, JObj).
+    wh_json:set_value(?PVT_RESELLER_ID, ResellerId, JObj).
 
 -spec set_is_dirty(doc(), boolean()) -> doc().
 set_is_dirty(JObj, IsDirty) ->
@@ -194,6 +205,10 @@ set_plan(JObj, PlanId, 'undefined') ->
     wh_json:delete_key([?PLANS, PlanId], JObj);
 set_plan(JObj, PlanId, Plan) ->
     wh_json:set_value([?PLANS, PlanId], Plan, JObj).
+
+-spec set_plan_doc(doc(), ne_binary(), kzd_service_plan:doc()) -> doc().
+set_plan_doc(JObj, PlanId, PlanDoc) ->
+    wh_json:set_value([?PLANS, PlanId, ?PLAN_DOC], PlanDoc, JObj).
 
 -spec set_quantities(doc(), wh_json:object()) -> wh_json:object().
 set_quantities(JObj, Quantities) ->
