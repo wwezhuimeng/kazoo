@@ -50,15 +50,8 @@ empty() -> [].
 -spec from_service_json(kzd_services:doc()) -> plans().
 from_service_json(ServicesJObj) ->
     PlanIds = kzd_services:plan_ids(ServicesJObj),
-    ResellerId = find_reseller_id(ServicesJObj),
+    ResellerId = kzd_services:reseller_id(ServicesJObj),
     get_plans(PlanIds, ResellerId, ServicesJObj).
-
--spec find_reseller_id(kzd_services:doc()) -> api_binary().
-find_reseller_id(ServicesJObj) ->
-    case kzd_services:reseller_id(ServicesJObj) of
-        'undefined' -> wh_json:get_value(<<"reseller_id">>, ServicesJObj);
-        ResellerId -> ResellerId
-    end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -209,7 +202,7 @@ get_plan(PlanId, ResellerId, Services, ServicePlans) ->
     VendorId = kzd_services:plan_account_id(Services, PlanId, ResellerId),
     Overrides = kzd_services:plan_overrides(Services, PlanId),
 
-    case maybe_fetch_vendor_plan(PlanId, VendorId, ResellerId, Overrides) of
+    case maybe_fetch_vendor_plan(PlanId, VendorId, ResellerId, Overrides, Services) of
         'undefined' -> ServicePlans;
         Plan -> append_vendor_plan(Plan, VendorId, ServicePlans)
     end.
@@ -220,17 +213,25 @@ get_plan(PlanId, ResellerId, Services, ServicePlans) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_fetch_vendor_plan(ne_binary(), ne_binary(), ne_binary(), wh_json:object()) ->
-                                     api_object().
-maybe_fetch_vendor_plan(PlanId, VendorId, VendorId, Overrides) ->
+-spec maybe_fetch_vendor_plan(ne_binary(), ne_binary(), ne_binary(), wh_json:object(), kzd_services:doc()) ->
+                                     kzd_service_plan:doc() | 'undefined'.
+maybe_fetch_vendor_plan(PlanId, VendorId, VendorId, Overrides, Services) ->
+    case kzd_services:plan_doc(Services, PlanId) of
+        'undefined' -> fetch_vendor_plan(PlanId, VendorId, Overrides);
+        ServicePlan -> kzd_service_plan:merge_overrides(ServicePlan, Overrides)
+    end;
+maybe_fetch_vendor_plan(PlanId, _VendorId, ResellerId, _Overrides, _Services) ->
+    lager:debug("service plan ~s doesnt belong to reseller ~s (but to vendor ~s)", [PlanId, ResellerId, _VendorId]),
+    'undefined'.
+
+-spec fetch_vendor_plan(ne_binary(), ne_binary(), wh_json:object()) ->
+                               kzd_service_plan:doc() | 'undefined'.
+fetch_vendor_plan(PlanId, VendorId, Overrides) ->
     case wh_service_plan:fetch(PlanId, VendorId) of
         'undefined' -> 'undefined';
         ServicePlan ->
             kzd_service_plan:merge_overrides(ServicePlan, Overrides)
-    end;
-maybe_fetch_vendor_plan(PlanId, _, ResellerId, _) ->
-    lager:debug("service plan ~s doesnt belong to reseller ~s", [PlanId, ResellerId]),
-    'undefined'.
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
