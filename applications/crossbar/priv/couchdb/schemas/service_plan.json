@@ -5,28 +5,28 @@
     "name": "Service Plan",
     "patternProperties": {
         ".+": {
+            "type": "object",
             "description": "The category of things in the service plan",
             "patternProperties": {
                 ".+": {
                     "$ref": "service_plan_items",
                     "description": "The item of interest in the category",
                     "type": "object"
-                },
-                "properties": {
-                    "_all": {
-                        "description": "Plan information applied to all items within the category",
-                        "properties": {
-                            "exceptions": {
-                                "description": "List of item names that are excluded being counted",
-                                "items": "string",
-                                "type": "array"
-                            }
-                        },
-                        "type": "object"
-                    }
                 }
             },
-            "type": "object"
+            "properties": {
+                "_all": {
+                    "description": "Plan information applied to all items within the category",
+                    "properties": {
+                        "exceptions": {
+                            "description": "List of item names that are excluded being counted",
+                            "items":{"type":"string"},
+                            "type": "array"
+                        }
+                    },
+                    "type": "object"
+                }
+            }
         }
     },
     "required": true,
