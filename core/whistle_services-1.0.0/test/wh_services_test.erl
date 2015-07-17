@@ -16,6 +16,7 @@
                 ,services :: wh_services:services()
                 ,services_jobj :: wh_json:object()
                 ,account_plan :: kzd_service_plan:plan()
+                ,schema_loader_fun :: fun((binary()) -> {'ok', wh_json:object()})
                }).
 
 services_test_() ->
@@ -35,6 +36,7 @@ init() ->
                 ,#state{}
                 ,[fun read_service_plan/1
                   ,fun read_services/1
+                  ,fun build_schema_loader_fun/1
                  ]).
 
 init_fold(F, State) ->
@@ -63,6 +65,18 @@ read_services(#state{service_plan_jobj=ServicePlan}=State) ->
                 ,services=Services
                 ,account_plan=AccountPlan
                }.
+
+build_schema_loader_fun(#state{}=State) ->
+    SchemaIds = [<<"service_plans">>, <<"service_plan">>, <<"service_plan_items">>, <<"bookkeepers">>],
+    Schemas = [{Id, load_schema(Id)} || Id <- SchemaIds],
+    State#state{schema_loader_fun=
+                    fun(Name) -> {'ok', props:get_value(Name, Schemas)} end
+               }.
+
+load_schema(Id) ->
+    CBPriv = code:priv_dir('crossbar'),
+    Path = filename:join([CBPriv, "couchdb", "schemas", <<Id/binary, ".json">>]),
+    read_json(Path).
 
 priv_dir() ->
     case code:priv_dir('whistle_services') of
@@ -142,13 +156,18 @@ item_check(Category, Item, Quantity, Services) ->
      ,?_assertEqual(Quantity, wh_services:quantity(Category, Item, Services))
     }.
 
-service_plan_schema_check(#state{service_plan_jobj=ServicePlan}) ->
-
-
+service_plan_schema_check(#state{service_plan_jobj=ServicePlan
+                                 ,schema_loader_fun=F
+                                }) ->
     {"checking service plan fixture against schema"
-     ,case wh_json_schema:validate(<<"service_plans">>, ServicePlan) of
+     ,try wh_json_schema:validate(<<"service_plans">>, ServicePlan, [{'schema_loader_fun', F}]) of
           {'ok', _} -> ?_assert('true');
           {'error', _E} -> ?_assert('false')
+      catch
+          'error':_E ->
+              ST = erlang:get_stacktrace(),
+              ?debugFmt("error: ~p~n~p~n", [_E, ST]),
+              ?_assert('false')
       end
     }.
 
@@ -202,7 +221,6 @@ increase_quantities(#state{account_plan=_AccountPlan
        ,?_assertEqual(Increment, DiffItemQuantity)
       }
      | category_quantities(Services, UpdatedServices, Increment)
-     ++ dry_run_charges(UpdatedServices, Increment)
     ].
 
 category_quantities(CurrentServices, UpdatedServices, Increment) ->
@@ -228,9 +246,3 @@ category_quantities(CurrentServices, UpdatedServices, Increment) ->
        ,?_assertEqual(MinusDIDUS, UpdatedCategoryQuantity-DIDUSQuantity)
       }
     ].
-
-dry_run_charges(Services, _Increment) ->
-    DryRunCharges = wh_services:dry_run(Services),
-    ?debugFmt("dry run: ~p~n", [DryRunCharges]),
-    ?debugFmt("services: ~p~n", [wh_services:updated_quantities(Services)]),
-    [].
