@@ -21,10 +21,23 @@
                                        ,{<<"ZRTP-Enrollment">>, 'true'}
                                       ]}
                         ]).
+-define(CACHE_KEY(Db, Id), {?MODULE, Db, Id}).
 
+%%-----------------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() -> 'ok'.
 
+%%-----------------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec handle_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
     'true' = wapi_authn:req_v(JObj),
@@ -49,6 +62,12 @@ handle_req(JObj, _Props) ->
             end
     end.
 
+%%-----------------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec send_auth_resp(auth_user(), wh_json:object()) -> 'ok'.
 send_auth_resp(#auth_user{password=Password
                           ,username=Username
@@ -76,6 +95,16 @@ send_auth_resp(#auth_user{password=Password
     lager:info("sending SIP authentication reply, with credentials for user ~s@~s",[Username,Realm]),
     wapi_authn:publish_resp(wh_json:get_value(<<"Server-ID">>, JObj), Resp).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec send_auth_error(wh_json:object()) -> 'ok'.
 send_auth_error(JObj) ->
     %% NOTE: Kamailio needs registrar errors since it is blocking with no
@@ -90,6 +119,12 @@ send_auth_error(JObj) ->
     lager:debug("sending SIP authentication error"),
     wapi_authn:publish_error(wh_json:get_value(<<"Server-ID">>, JObj), Resp).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec create_ccvs(auth_user()) -> wh_json:object().
 create_ccvs(#auth_user{doc=JObj}=AuthUser) ->
     Props = [{<<"Username">>, AuthUser#auth_user.username}
@@ -109,6 +144,12 @@ create_ccvs(#auth_user{doc=JObj}=AuthUser) ->
             ],
     wh_json:from_list(props:filter_undefined(Props)).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_get_presence_id(auth_user()) -> api_binary().
 maybe_get_presence_id(#auth_user{account_db=AccountDb
                                  ,authorizing_id=DeviceId
@@ -125,6 +166,12 @@ maybe_get_presence_id(#auth_user{account_db=AccountDb
             end
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_presence_id(api_binary(), api_binary(), api_binary()) -> api_binary().
 get_presence_id('undefined', _, _) -> 'undefined';
 get_presence_id(_, 'undefined', 'undefined') -> 'undefined';
@@ -133,9 +180,15 @@ get_presence_id(AccountDb, DeviceId, 'undefined') ->
 get_presence_id(AccountDb, DeviceId, OwnerId) ->
     maybe_get_owner_presence_id(AccountDb, DeviceId, OwnerId).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_get_owner_presence_id(ne_binary(), ne_binary(), ne_binary()) -> api_binary().
 maybe_get_owner_presence_id(AccountDb, DeviceId, OwnerId) ->
-    case couch_mgr:open_cache_doc(AccountDb, OwnerId) of
+    case get_doc(AccountDb, OwnerId) of
         {'error', _} -> 'undefined';
         {'ok', UserJObj} ->
             case kzd_user:presence_id(UserJObj) of
@@ -144,9 +197,15 @@ maybe_get_owner_presence_id(AccountDb, DeviceId, OwnerId) ->
             end
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_device_presence_id(ne_binary(), ne_binary()) -> api_binary().
 get_device_presence_id(AccountDb, DeviceId) ->
-    case couch_mgr:open_cache_doc(AccountDb, DeviceId) of
+    case get_doc(AccountDb, DeviceId) of
         {'error', _} -> 'undefined';
         {'ok', JObj} ->
             case kz_device:presence_id(JObj) of
@@ -155,6 +214,12 @@ get_device_presence_id(AccountDb, DeviceId) ->
             end
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec create_specific_ccvs(auth_user(), ne_binary()) -> wh_proplist().
 create_specific_ccvs(#auth_user{msisdn=MSISDN}, ?GSM_ANY_METHOD) ->
     [{<<"Caller-ID">>, MSISDN}
@@ -162,6 +227,12 @@ create_specific_ccvs(#auth_user{msisdn=MSISDN}, ?GSM_ANY_METHOD) ->
     ];
 create_specific_ccvs(_, _) -> [].
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec create_custom_sip_headers(api_binary(), auth_user()) -> api_object().
 create_custom_sip_headers(?GSM_ANY_METHOD
                           ,#auth_user{a3a8_kc=KC
@@ -183,10 +254,22 @@ create_custom_sip_headers(?GSM_ANY_METHOD
      );
 create_custom_sip_headers(?ANY_AUTH_METHOD, _) -> 'undefined'.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec create_custom_sip_headers(wh_proplist()) -> api_object().
 create_custom_sip_headers([]) -> 'undefined';
 create_custom_sip_headers(Props) -> wh_json:from_list(Props).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_tel_uri(api_binary()) -> api_binary().
 get_tel_uri('undefined') -> 'undefined';
 get_tel_uri(Number) -> <<"<tel:", Number/binary,">">>.
@@ -206,6 +289,12 @@ lookup_auth_user(Username, Realm, Req) ->
         {'ok', JObj} -> check_auth_user(JObj, Username, Realm, Req)
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_auth_user(ne_binary(), ne_binary()) ->
                            {'ok', wh_json:object()} |
                            {'error', 'not_found'}.
@@ -224,6 +313,12 @@ get_auth_user(Username, Realm) ->
             get_auth_user_in_account(Username, Realm, AccountDB)
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_auth_user_in_agg(ne_binary(), ne_binary()) ->
                                   {'ok', wh_json:object()} |
                                   {'error', 'not_found'}.
@@ -248,6 +343,12 @@ get_auth_user_in_agg(Username, Realm) ->
             {'ok', User}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_auth_user_in_account(ne_binary(), ne_binary(), ne_binary()) ->
                                       {'ok', wh_json:object()} |
                                       {'error', 'not_found'}.
@@ -283,6 +384,12 @@ lookup_account_by_ip(IP) ->
         {'error', 'not_found'} -> fetch_account_by_ip(IP)
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec fetch_account_by_ip(ne_binary()) ->
                                  {'ok', wh_proplist()} |
                                  couch_mgr:couchbeam_error().
@@ -301,10 +408,22 @@ fetch_account_by_ip(IP) ->
             Error
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec ip_cache_key(ne_binary()) -> {'auth_ip', ne_binary()}.
 ip_cache_key(IP) ->
     {'auth_ip', IP}.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec account_ccvs_from_ip_auth(wh_json:object()) -> wh_proplist().
 account_ccvs_from_ip_auth(Doc) ->
     AccountID = wh_json:get_value([<<"value">>, <<"account_id">>], Doc),
@@ -337,6 +456,12 @@ check_auth_user(JObj, Username, Realm, Req) ->
         'false' -> {'error', 'disabled'}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec is_account_enabled(wh_json:object()) -> boolean().
 is_account_enabled(JObj) ->
     AccountId = get_account_id(JObj),
@@ -347,6 +472,12 @@ is_account_enabled(JObj) ->
             'false'
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_auth_type_enabled(wh_json:object()) -> boolean().
 maybe_auth_type_enabled(JObj) ->
     case wh_json:get_value([<<"doc">>, <<"pvt_type">>], JObj) of
@@ -354,6 +485,12 @@ maybe_auth_type_enabled(JObj) ->
         _Else -> 'true'
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec is_device_enabled(wh_json:object()) -> boolean().
 is_device_enabled(JObj) ->
     Default = whapps_config:get_is_true(?CONFIG_CAT, <<"device_enabled_default">>, 'true'),
@@ -364,6 +501,12 @@ is_device_enabled(JObj) ->
             'false'
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_owner_enabled(wh_json:object()) -> boolean().
 maybe_owner_enabled(JObj) ->
     case wh_json:get_value([<<"doc">>, <<"owner_id">>], JObj) of
@@ -371,10 +514,16 @@ maybe_owner_enabled(JObj) ->
         OwnerId -> is_owner_enabled(get_account_db(JObj), OwnerId)
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec is_owner_enabled(ne_binary(), ne_binary()) -> boolean().
 is_owner_enabled(AccountDb, OwnerId) ->
     Default = whapps_config:get_is_true(?CONFIG_CAT, <<"owner_enabled_default">>, 'true'),
-    case couch_mgr:open_cache_doc(AccountDb, OwnerId) of
+    case get_doc(AccountDb, OwnerId) of
         {'ok', UserJObj} ->
             case kzd_user:is_enabled(UserJObj, Default) of
                 'true' -> 'true';
@@ -387,6 +536,12 @@ is_owner_enabled(AccountDb, OwnerId) ->
             'true'
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec jobj_to_auth_user(wh_json:object(), ne_binary(), ne_binary(), wh_json:object()) ->
                                {'ok', auth_user()} |
                                {'error', _}.
@@ -410,6 +565,12 @@ jobj_to_auth_user(JObj, Username, Realm, Req) ->
                          },
     maybe_auth_method(add_account_name(AuthUser), AuthDoc, Req, Method).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_auth_value(wh_json:object()) -> api_object().
 get_auth_value(JObj) ->
     wh_json:get_first_defined([[<<"doc">>,<<"sip">>]
@@ -418,6 +579,12 @@ get_auth_value(JObj) ->
                               ,JObj
                              ).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec add_account_name(auth_user()) -> auth_user().
 add_account_name(#auth_user{account_id=AccountId}=AuthUser) ->
     case kz_account:fetch(AccountId) of
@@ -430,6 +597,12 @@ add_account_name(#auth_user{account_id=AccountId}=AuthUser) ->
                               }
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec get_auth_method(wh_json:object() | ne_binary()) -> ne_binary().
 get_auth_method(?GSM_ANY_METHOD=M) when is_binary(M)-> <<"gsm">>;
 get_auth_method(M) when is_binary(M) -> M;
@@ -441,6 +614,12 @@ get_auth_method(JObj) ->
                               ,<<"password">>
                              ).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_auth_method(auth_user(), wh_json:object(), wh_json:object(), ne_binary()) ->
                                {'ok', auth_user()} |
                                {'error', _}.
@@ -475,6 +654,12 @@ maybe_auth_method(AuthUser, _JObj, _Req, ?ANY_AUTH_METHOD)->
 -define(GSM_PRE_REGISTER_ROUTINES, [fun maybe_msisdn/1]).
 -define(GSM_REGISTER_ROUTINES, [fun maybe_msisdn/1]).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_update_gsm(api_binary(), auth_user()) -> auth_user().
 maybe_update_gsm(<<"PRE-REGISTER">>, AuthUser) ->
     lists:foldl(fun(F,A) -> F(A) end, AuthUser, ?GSM_PRE_REGISTER_ROUTINES);
@@ -482,6 +667,12 @@ maybe_update_gsm(<<"REGISTER">>, AuthUser) ->
     lists:foldl(fun(F,A) -> F(A) end, AuthUser, ?GSM_REGISTER_ROUTINES);
 maybe_update_gsm(_, AuthUser) -> AuthUser.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_msisdn(auth_user()) -> auth_user().
 maybe_msisdn(#auth_user{msisdn='undefined'
                         ,owner_id='undefined'
@@ -494,6 +685,12 @@ maybe_msisdn(#auth_user{msisdn='undefined'
     maybe_msisdn_from_callflows(AuthUser, <<"user">>, OwnerId);
 maybe_msisdn(AuthUser) -> AuthUser.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_msisdn_from_callflows(auth_user(), ne_binary(), ne_binary()) -> auth_user().
 maybe_msisdn_from_callflows(#auth_user{account_db=AccountDB}=AuthUser
                             ,Type
@@ -517,6 +714,12 @@ maybe_msisdn_from_callflows(#auth_user{account_db=AccountDB}=AuthUser
             AuthUser#auth_user{msisdn=MSISDN}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec gsm_auth(auth_user()) -> {'ok', auth_user()}.
 gsm_auth(#auth_user{method=?GSM_CACHED_METHOD
                     ,a3a8_sres=SRES
@@ -568,10 +771,22 @@ get_account_db(JObj) ->
         AccountDb -> wh_util:format_account_id(AccountDb, 'encoded')
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec remove_dashes(ne_binary()) -> ne_binary().
 remove_dashes(Bin) ->
     << <<B>> || <<B>> <= Bin, B =/= $->>.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec encryption_method_map(wh_proplist(), api_binaries() | wh_json:object()) -> wh_proplist().
 encryption_method_map(Props, []) -> Props;
 encryption_method_map(Props, [Method|Methods]) ->
@@ -584,6 +799,12 @@ encryption_method_map(Props, JObj) ->
     Methods = wh_json:get_value(Key, JObj, []),
     encryption_method_map(Props, Methods).
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec generate_security_ccvs(auth_user()) -> wh_proplist().
 -spec generate_security_ccvs(auth_user(), wh_proplist()) -> wh_proplist().
 
@@ -597,6 +818,12 @@ generate_security_ccvs(#auth_user{}=User, Acc0) ->
     {_, Acc} = lists:foldl(fun(F, Acc) -> F(Acc) end, {User, Acc0}, CCVFuns),
     Acc.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_enforce_security({auth_user(), wh_proplist()}) -> {auth_user(), wh_proplist()}.
 maybe_enforce_security({#auth_user{doc=JObj}=User, Acc}) ->
     case wh_json:is_true([<<"media">>
@@ -608,6 +835,45 @@ maybe_enforce_security({#auth_user{doc=JObj}=User, Acc}) ->
         'false' -> {User, Acc}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec maybe_set_encryption_flags({auth_user(), wh_proplist()}) -> {auth_user(), wh_proplist()}.
 maybe_set_encryption_flags({#auth_user{doc=JObj}=User, Acc}) ->
     {User, encryption_method_map(Acc, JObj)}.
+
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_doc(ne_binary(), ne_binary()) -> {'ok', wh_json:object()} | {'error', any()}.
+get_doc(Account, DocId) ->
+    AccountDb = wh_util:format_account_id(Account, 'encode'),
+    case wh_cache:fetch_local(?REG_CACHE, ?CACHE_KEY(AccountDb, DocId)) of
+        {'ok', _}=Ok -> Ok;
+        {'error', 'not_found'} ->
+            get_doc_from_db(AccountDb, DocId)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_doc_from_db(ne_binary(), ne_binary()) -> {'ok', wh_json:object()} | {'error', any()}.
+get_doc_from_db(Account, DocId) ->
+    AccountDb = wh_util:format_account_id(Account, 'encode'),
+    case couch_mgr:open_cache_doc(AccountDb, DocId) of
+        {'error', _}=Error -> Error;
+        {'ok', JObj}=Ok ->
+            CacheProps = [{'origin', {'db', AccountDb, DocId}}],
+            wh_cache:store_local(?REG_CACHE, ?CACHE_KEY(AccountDb, DocId), JObj, CacheProps),
+            Ok
+    end.
+
