@@ -65,7 +65,7 @@ transactions(AccountId, From, To) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec handle_topup(ne_binary(), wh_transactions:transactions()) -> 'ok'.
+-spec handle_topup(ne_binary(), wh_transaction:transactions()) -> 'ok'.
 handle_topup(_, []) -> 'ok';
 handle_topup(BillingId, [Transaction|Transactions]) ->
     case wh_transaction:code(Transaction) =:= ?CODE_TOPUP of
