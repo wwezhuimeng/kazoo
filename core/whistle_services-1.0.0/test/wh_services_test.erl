@@ -28,6 +28,7 @@ services_test_() ->
        ,fun services_record_to_json/1
        ,fun service_plan_json_to_plans/1
        ,fun increase_quantities/1
+       ,fun dry_run_calculations/1
       ]
     }.
 
@@ -200,7 +201,7 @@ cumulative_discount(Item) ->
 rate(JObj) ->
     wh_json:get_float_value(<<"rate">>, JObj).
 
-increase_quantities(#state{services=Services}=State) ->
+increase_quantities(#state{services=Services}=_State) ->
     ItemQuantity = wh_services:quantity(?CAT, ?ITEM, Services),
 
     random:seed(os:timestamp()),
@@ -222,7 +223,6 @@ increase_quantities(#state{services=Services}=State) ->
        ,?_assertEqual(Increment, DiffItemQuantity)
       }
      | category_quantities(Services, UpdatedServices, Increment)
-     ++ service_plan_items(State, UpdatedServices, Increment)
     ].
 
 category_quantities(CurrentServices, UpdatedServices, Increment) ->
@@ -249,16 +249,16 @@ category_quantities(CurrentServices, UpdatedServices, Increment) ->
       }
     ].
 
-service_plan_items(#state{service_plan_jobj=ServicePlan}
-                   ,UpdatedServices
-                   ,_Increment
-                  ) ->
-    ServicesJObj = wh_services:to_json(UpdatedServices),
-    ?debugFmt("plan ids: ~p~n", [kzd_services:plan_ids(ServicesJObj)]),
-    ?debugFmt("reseller id: ~p~n", [kzd_services:reseller_id(ServicesJObj)]),
-    ?debugFmt("vendor id: ~p~n", [kzd_services:plan_account_id(ServicesJObj, wh_doc:id(ServicePlan))]),
+dry_run_calculations(#state{services=Services
+                            ,service_plan_jobj=_ServicePlan
+                           }) ->
+    ItemQuantity = wh_services:quantity(?CAT, ?ITEM, Services),
+    UpdatedServices = wh_services:update(?CAT, ?ITEM, ItemQuantity+1, Services),
 
-    ?debugFmt("plan doc: ~p~n", [kzd_services:plan_doc(ServicesJObj, wh_doc:id(ServicePlan))]),
-    Items = wh_service_plans:public_json_items(ServicesJObj),
-    ?debugFmt("items: ~p~n", [Items]),
-    [].
+    DryRun = wh_services:dry_run(UpdatedServices),
+    ?debugFmt("dry run: ~p~n", [DryRun]),
+
+    [{"Verify activation charge for phone_numbers.did_us"
+      ,?_assertEqual(2.0, wh_services:activation_charges(?CAT, ?ITEM, Services))
+     }
+    ].
