@@ -189,19 +189,25 @@ public_json_items(ServiceJObj) ->
 -spec get_plans(ne_binaries(), ne_binary(), kzd_services:doc()) -> plans().
 -spec get_plan(ne_binary(), ne_binary(), kzd_services:doc(), plans()) -> plans().
 
-get_plans(PlanIds, ResellerId, Services) ->
+get_plans(PlanIds, ResellerId, ServicesJObj) ->
     lists:foldl(fun(PlanId, ServicePlans) ->
-                        get_plan(PlanId, ResellerId, Services, ServicePlans)
+                        get_plan(PlanId, ResellerId, ServicesJObj, ServicePlans)
                 end
                 ,empty()
                 ,PlanIds
                ).
 
-get_plan(PlanId, ResellerId, Services, ServicePlans) ->
-    VendorId = kzd_services:plan_account_id(Services, PlanId, ResellerId),
-    Overrides = kzd_services:plan_overrides(Services, PlanId),
+get_plan(PlanId, ResellerId, ServicesJObj, ServicePlans) ->
+    VendorId = kzd_services:plan_account_id(ServicesJObj, PlanId, ResellerId),
+    Overrides = kzd_services:plan_overrides(ServicesJObj, PlanId),
 
-    case maybe_fetch_vendor_plan(PlanId, VendorId, ResellerId, Overrides, Services) of
+    case maybe_fetch_vendor_plan(PlanId
+                                 ,VendorId
+                                 ,ResellerId
+                                 ,Overrides
+                                 ,ServicesJObj
+                                )
+    of
         'undefined' -> ServicePlans;
         Plan -> append_vendor_plan(Plan, VendorId, ServicePlans)
     end.
@@ -214,12 +220,12 @@ get_plan(PlanId, ResellerId, Services, ServicePlans) ->
 %%--------------------------------------------------------------------
 -spec maybe_fetch_vendor_plan(ne_binary(), ne_binary(), ne_binary(), wh_json:object(), kzd_services:doc()) ->
                                      kzd_service_plan:doc() | 'undefined'.
-maybe_fetch_vendor_plan(PlanId, VendorId, VendorId, Overrides, Services) ->
-    case kzd_services:plan_doc(Services, PlanId) of
+maybe_fetch_vendor_plan(PlanId, VendorId, VendorId, Overrides, ServicesJObj) ->
+    case kzd_services:plan_doc(ServicesJObj, PlanId) of
         'undefined' -> fetch_vendor_plan(PlanId, VendorId, Overrides);
         ServicePlan -> kzd_service_plan:merge_overrides(ServicePlan, Overrides)
     end;
-maybe_fetch_vendor_plan(PlanId, _VendorId, ResellerId, _Overrides, _Services) ->
+maybe_fetch_vendor_plan(PlanId, _VendorId, ResellerId, _Overrides, _ServicesJObj) ->
     lager:debug("service plan ~s doesnt belong to reseller ~s (but to vendor ~s)", [PlanId, ResellerId, _VendorId]),
     'undefined'.
 
