@@ -867,6 +867,8 @@ diff_item_quantities(ItemId, ItemQuantity, Updates, CategoryId) ->
     UpdateQuantity = wh_json:get_integer_value([CategoryId, ItemId], Updates, ItemQuantity),
     maybe_update_diff([CategoryId, ItemId], ItemQuantity, UpdateQuantity, Updates).
 
+-spec maybe_update_diff(ne_binaries(), integer(), api_integer(), wh_json:object()) ->
+                               wh_json:object().
 maybe_update_diff(_Key, _ItemQuantity, 'undefined', Updates) ->
     lager:debug("no update for ~p", [_Key]),
     Updates;
@@ -880,6 +882,7 @@ maybe_update_diff(Key, ItemQuantity, UpdateQuantity, Updates) ->
     lager:debug("updating ~p from ~p(i) to ~p(u)", [Key, ItemQuantity, UpdateQuantity]),
     wh_json:set_value(Key, UpdateQuantity - ItemQuantity, Updates).
 
+-spec diff_quantity(ne_binary(), ne_binary(), services()) -> integer().
 diff_quantity(_, _, #wh_services{deleted='true'}) -> 0;
 diff_quantity(CategoryId, ItemId, #wh_services{jobj=JObj
                                                ,updates=Updates
@@ -1284,19 +1287,25 @@ do_cascade_quantities(<<_/binary>> = Account, <<_/binary>> = View, SubKey) ->
     end.
 
 -spec cascade_quantities_keys(ne_binary(), api_binaries()) ->
-                                     list().
+                                     couch_util:view_options().
 cascade_quantities_keys(AccountId, 'undefined') ->
     [{'startkey', [AccountId]}
-     ,{'endkey', [AccountId, wh_json:new()]}
+    ,{'endkey', [AccountId, wh_json:new()]}
     ];
-cascade_quantities_keys(AccountId, [Key]) ->
-    [{'startkey', [AccountId, Key]}
-     ,{'endkey', [AccountId, Key, wh_json:new()]}
+cascade_quantities_keys(AccountId, [<<_/binary>> = CategoryId]) ->
+    [{'startkey', [AccountId, CategoryId]}
+     ,{'endkey', [AccountId, CategoryId, wh_json:new()]}
     ];
-cascade_quantities_keys(AccountId, Keys) when is_list(Keys) ->
+cascade_quantities_keys(AccountId, [<<_/binary>> = _CategoryId
+                                    ,<<_/binary>> = _ItemId
+                                   ]=Keys) ->
     [{'startkey', [AccountId | Keys]}
      ,{'endkey', [AccountId | Keys]}
-    ].
+    ];
+cascade_quantities_keys(AccountId, [<<_/binary>> = CategoryId
+                                    ,'undefined'
+                                   ]) ->
+    cascade_quantities_keys(AccountId, [CategoryId]).
 
 -spec do_cascade_quantities_fold(wh_json:object(), wh_json:object()) ->
                                         wh_json:object().
