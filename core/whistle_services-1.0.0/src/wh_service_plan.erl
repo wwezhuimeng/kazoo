@@ -265,17 +265,44 @@ get_item_quantity(CategoryId, AllItems, ItemPlan, ServicesJObj, AllItems) ->
     Exceptions = kzd_item_plan:exceptions(ItemPlan),
 
     case kzd_item_plan:should_cascade(ItemPlan) of
-        'false' -> wh_services:category_quantity(CategoryId, Exceptions, ServicesJObj, wh_json:new());
+        'false' ->
+            wh_services:category_quantity(CategoryId, Exceptions, ServicesJObj, wh_json:new());
         'true' ->
             lager:debug("collecting '~s' as a cascaded sum", [CategoryId]),
-            Services = wh_services:from_service_json(ServicesJObj),
-            wh_services:cascade_category_quantity(CategoryId, Exceptions, Services)
+
+            CascadeQuantities = cascade_quantities(CategoryId, 'undefined', ServicesJObj),
+            CatQuantities = wh_json:get_json_value(CategoryId, CascadeQuantities, wh_json:new()),
+            QtysMinusEx = wh_json:delete_keys(Exceptions, CatQuantities),
+
+            CategoryQuantity = wh_services:category_quantity(CategoryId, Exceptions, ServicesJObj, wh_json:new()),
+
+            wh_json:foldl(fun(_ItemId, ItemQuantity, Sum) ->
+                                  ItemQuantity + Sum
+                          end
+                          ,CategoryQuantity
+                          ,QtysMinusEx
+                         )
     end;
 get_item_quantity(CategoryId, ItemId, ItemPlan, ServicesJObj, _AllItems) ->
     case kzd_item_plan:should_cascade(ItemPlan) of
-        'false' -> wh_services:quantity(CategoryId, ItemId, ServicesJObj, wh_json:new());
+        'false' ->
+            wh_services:quantity(CategoryId, ItemId, ServicesJObj, wh_json:new());
         'true' ->
             lager:debug("collecting '~s/~s' as a cascaded quantity", [CategoryId, ItemId]),
-            Services = wh_services:from_service_json(ServicesJObj),
-            wh_services:cascade_quantity(CategoryId, ItemId, Services)
+            CascadeQuantities = cascade_quantities(CategoryId, ItemId, ServicesJObj),
+
+            %% Cascade quantity
+            kzd_services:item_quantity(ServicesJObj, CategoryId, ItemId) +
+                wh_json:get_integer_value([CategoryId, ItemId], CascadeQuantities, 0)
     end.
+
+-spec cascade_quantities(ne_binary(), api_binary(), kzd_services:doc()) ->
+                                wh_json:object().
+cascade_quantities(CategoryId, ItemId, ServicesJObj) ->
+    AccountId = wh_doc:account_id(ServicesJObj),
+    IsReseller = kzd_services:is_reseller(ServicesJObj),
+
+    wh_services:cascade_quantities(AccountId
+                                   ,IsReseller
+                                   ,props:filter_undefined([CategoryId, ItemId])
+                                  ).
