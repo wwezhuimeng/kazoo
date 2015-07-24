@@ -255,20 +255,17 @@ send_topup_notification(Success, BillingId, BtTransaction) ->
              ,{<<"Response">>, wh_json:get_value(<<"processor_response_text">>, Transaction)}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
-    _ = case
-            whapps_util:amqp_pool_send(
-              Props
-              ,fun wapi_notifications:publish_topup/1
-             )
-        of
-            'ok' ->
-                lager:debug("topup notification sent for ~s", [BillingId]);
-            {'error', _R} ->
-                lager:error(
-                  "failed to send topup notification for ~s : ~p"
-                           ,[BillingId, _R]
-                 )
-        end,
+    case wh_amqp_worker:cast(Props
+                            ,fun wapi_notifications:publish_topup/1
+                            )
+    of
+        'ok' ->
+            lager:debug("topup notification sent for ~s", [BillingId]);
+        {'error', _R} ->
+            lager:error("failed to send topup notification for ~s : ~p"
+                        ,[BillingId, _R]
+                       )
+    end,
     Success.
 
 %%--------------------------------------------------------------------
