@@ -49,7 +49,9 @@
          ,updated_quantities/1, updated_quantities/2
         ]).
 -export([category_quantity/2, category_quantity/3, category_quantity/4]).
--export([cascade_quantity/3, cascade_quantities/1]).
+-export([cascade_quantity/3
+         ,cascade_quantities/1, cascade_quantities/2, cascade_quantities/3
+        ]).
 -export([cascade_category_quantity/2, cascade_category_quantity/3]).
 -export([reset_category/2]).
 -export([get_service_module/1]).
@@ -165,6 +167,8 @@ from_service_json(JObj) ->
 from_service_json(JObj, ShouldCalcUpdates) ->
     AccountId = wh_doc:account_id(JObj),
     BillingId = kzd_services:billing_id(JObj, AccountId),
+
+    lager:debug("converting services jobj for ~s (~p) to record", [AccountId, ShouldCalcUpdates]),
 
     Services = #wh_services{account_id = AccountId
                             ,jobj = JObj
@@ -328,16 +332,16 @@ save_as_dirty(#wh_services{jobj = JObj
 
 -spec save_conflicting_as_dirty(services(), pos_integer()) -> services().
 save_conflicting_as_dirty(#wh_services{account_id=AccountId}, BackOff) ->
-    {'ok', Existing} = fetch_services_doc(AccountId, 'true'),
-    NewServices = from_service_json(Existing),
-    case is_dirty(NewServices) of
+    {'ok', ExistingJObj} = fetch_services_doc(AccountId, 'true'),
+    ExistingServices = from_service_json(ExistingJObj, 'false'),
+    case is_dirty(ExistingServices) of
         'true' ->
             lager:debug("services doc for ~s saved elsewhere", [AccountId]),
-            NewServices;
+            ExistingServices;
         'false' ->
-            lager:debug("new services doc for ~s not dirty, marking it as so", [AccountId]),
+            lager:debug("existing services doc for ~s not dirty, marking it as so", [AccountId]),
             timer:sleep(BackOff + random:uniform(?BASE_BACKOFF)),
-            save_as_dirty(NewServices, BackOff*2)
+            save_as_dirty(ExistingServices, BackOff*2)
     end.
 
 -spec account_name(ne_binary()) -> api_binary().
@@ -849,6 +853,7 @@ diff_quantities(CategoryId, #wh_services{jobj=JObj
                                         }) ->
     CatQuantities = kzd_services:category_quantities(JObj, CategoryId),
     UpdateQuantities = wh_json:get_value(CategoryId, Updates, wh_json:new()),
+    lager:debug("base update quantities for ~s: ~p", [UpdateQuantities]),
     wh_json:foldl(fun(Id, Q, Acc) ->
                           diff_item_quantities(Id, Q, Acc, CategoryId)
                   end
@@ -859,7 +864,7 @@ diff_quantities(CategoryId, #wh_services{jobj=JObj
 -spec diff_item_quantities(ne_binary(), integer(), wh_json:object(), ne_binary()) ->
                              wh_json:object().
 diff_item_quantities(ItemId, ItemQuantity, Updates, CategoryId) ->
-    UpdateQuantity = wh_json:get_integer_value([CategoryId, ItemId], Updates),
+    UpdateQuantity = wh_json:get_integer_value([CategoryId, ItemId], Updates, ItemQuantity),
     maybe_update_diff([CategoryId, ItemId], ItemQuantity, UpdateQuantity, Updates).
 
 maybe_update_diff(_Key, _ItemQuantity, 'undefined', Updates) ->
@@ -868,8 +873,11 @@ maybe_update_diff(_Key, _ItemQuantity, 'undefined', Updates) ->
 maybe_update_diff(_Key, 0, 0, Updates) ->
     lager:debug("not updating ~p", [_Key]),
     Updates;
+maybe_update_diff(Key, ItemQuantity, ItemQuantity, Updates) ->
+    lager:debug("no change in quantity, removing ~p", [Key]),
+    wh_json:delete_key(Key, Updates);
 maybe_update_diff(Key, ItemQuantity, UpdateQuantity, Updates) ->
-    lager:debug("updating ~p from ~p to ~p", [Key, ItemQuantity, UpdateQuantity]),
+    lager:debug("updating ~p from ~p(i) to ~p(u)", [Key, ItemQuantity, UpdateQuantity]),
     wh_json:set_value(Key, UpdateQuantity - ItemQuantity, Updates).
 
 diff_quantity(_, _, #wh_services{deleted='true'}) -> 0;
@@ -877,7 +885,10 @@ diff_quantity(CategoryId, ItemId, #wh_services{jobj=JObj
                                                ,updates=Updates
                                               }) ->
     ItemQuantity = kzd_services:item_quantity(JObj, CategoryId, ItemId),
-    UpdateQuantity = wh_json:get_integer_value([CategoryId, ItemId], Updates, 0),
+    UpdateQuantity = wh_json:get_integer_value([CategoryId, ItemId], Updates, ItemQuantity),
+
+    lager:debug("diff of ~s.~s: ~p(u) - ~p(i)", [CategoryId, ItemId, UpdateQuantity, ItemQuantity]),
+
     UpdateQuantity - ItemQuantity.
 
 %%--------------------------------------------------------------------
@@ -963,8 +974,8 @@ cascade_category_quantity(CategoryId, ItemExceptions, #wh_services{cascade_quant
                               ,Services#wh_services{cascade_quantities=cascade_quantities(Services)}
                              );
 cascade_category_quantity(CategoryId, ItemExceptions, #wh_services{cascade_quantities=Quantities}=Services) ->
-    CatQuantiies = wh_json:get_value(CategoryId, Quantities, wh_json:new()),
-    QtysMinusEx = wh_json:delete_keys(ItemExceptions, CatQuantiies),
+    CatQuantities = wh_json:get_value(CategoryId, Quantities, wh_json:new()),
+    QtysMinusEx = wh_json:delete_keys(ItemExceptions, CatQuantities),
 
     wh_json:foldl(fun(_ItemId, ItemQuantity, Sum) ->
                           ItemQuantity + Sum
@@ -1081,7 +1092,9 @@ apply_cascade_categories(CategoryId, ItemsJObj, CascadeQuantities) ->
     wh_json:map(fun(ItemId, ItemQuantity) ->
                         Key = [CategoryId, ItemId],
                         CascadeQuantity = wh_json:get_integer_value(Key, CascadeQuantities, 0),
-                        lager:debug("incrementing update ~p:~p with cascade ~p", [Key, ItemQuantity, CascadeQuantity]),
+                        lager:debug("incrementing ~p item quantity ~p with cascade quantity ~p"
+                                    ,[Key, ItemQuantity, CascadeQuantity]
+                                   ),
                         {ItemId, ItemQuantity + CascadeQuantity}
                 end
                 ,ItemsJObj
@@ -1234,34 +1247,56 @@ get_service_module(Module) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec cascade_quantities(services()) -> wh_json:object().
--spec cascade_quantities(ne_binary(), boolean()) -> wh_json:object().
+-spec cascade_quantities(services()) ->
+                                wh_json:object().
+-spec cascade_quantities(ne_binary(), boolean()) ->
+                                wh_json:object().
+-spec cascade_quantities(ne_binary(), boolean(), api_binaries()) ->
+                                wh_json:object().
 
 cascade_quantities(#wh_services{cascade_quantities='undefined'}) ->
     wh_json:new();
 cascade_quantities(#wh_services{cascade_quantities=JObj}) ->
     JObj.
 
-cascade_quantities(<<_/binary>> = Account, 'false') ->
-    lager:debug("computing cascade quantities"),
-    do_cascade_quantities(Account, <<"services/cascade_quantities">>);
-cascade_quantities(<<_/binary>> = Account, 'true') ->
-    lager:debug("computing reseller cascade quantities"),
-    do_cascade_quantities(Account, <<"services/reseller_quantities">>).
+cascade_quantities(AccountId, IsReseller) ->
+    cascade_quantities(AccountId, IsReseller, 'undefined').
 
--spec do_cascade_quantities(ne_binary(), ne_binary()) -> wh_json:object().
-do_cascade_quantities(<<_/binary>> = Account, <<_/binary>> = View) ->
+cascade_quantities(<<_/binary>> = Account, 'false', SubKey) ->
+    lager:debug("computing cascade quantities"),
+    do_cascade_quantities(Account, <<"services/cascade_quantities">>, SubKey);
+cascade_quantities(<<_/binary>> = Account, 'true', SubKey) ->
+    lager:debug("computing reseller cascade quantities"),
+    do_cascade_quantities(Account, <<"services/reseller_quantities">>, SubKey).
+
+-spec do_cascade_quantities(ne_binary(), ne_binary(), api_binaries()) ->
+                                   wh_json:object().
+do_cascade_quantities(<<_/binary>> = Account, <<_/binary>> = View, SubKey) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
     ViewOptions = ['group'
                    ,'reduce'
-                   ,{'startkey', [AccountId]}
-                   ,{'endkey', [AccountId, wh_json:new()]}
+                   | cascade_quantities_keys(AccountId, SubKey)
                   ],
     case couch_mgr:get_results(?WH_SERVICES_DB, View, ViewOptions) of
         {'error', _} -> wh_json:new();
         {'ok', JObjs} ->
             lists:foldl(fun do_cascade_quantities_fold/2, wh_json:new(), JObjs)
     end.
+
+-spec cascade_quantities_keys(ne_binary(), api_binaries()) ->
+                                     list().
+cascade_quantities_keys(AccountId, 'undefined') ->
+    [{'startkey', [AccountId]}
+     ,{'endkey', [AccountId, wh_json:new()]}
+    ];
+cascade_quantities_keys(AccountId, [Key]) ->
+    [{'startkey', [AccountId, Key]}
+     ,{'endkey', [AccountId, Key, wh_json:new()]}
+    ];
+cascade_quantities_keys(AccountId, Keys) when is_list(Keys) ->
+    [{'startkey', [AccountId | Keys]}
+     ,{'endkey', [AccountId | Keys]}
+    ].
 
 -spec do_cascade_quantities_fold(wh_json:object(), wh_json:object()) ->
                                         wh_json:object().
