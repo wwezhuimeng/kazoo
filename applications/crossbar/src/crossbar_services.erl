@@ -111,15 +111,15 @@ extract_items(JObj) ->
 
 -spec extract_items_from_category(wh_json:key(), wh_json:object(), wh_json:objects()) ->
                                          wh_json:objects().
-extract_items_from_category(_, CategoryJObj, Acc) ->
+extract_items_from_category(_CategoryId, CategoryJObj, Acc) ->
     wh_json:foldl(fun extract_item_from_category/3
                   ,Acc
                   ,CategoryJObj
                  ).
 
 -spec extract_item_from_category(wh_json:key(), wh_json:object(), wh_json:objects()) ->
-                                         wh_json:objects().
-extract_item_from_category(_, ItemJObj, Acc) ->
+                                        wh_json:objects().
+extract_item_from_category(_ItemId, ItemJObj, Acc) ->
     [ItemJObj|Acc].
 
 %%--------------------------------------------------------------------
