@@ -231,7 +231,7 @@ create_view_options(Context) ->
     end.
 
 -spec create_view_options(cb_context:context(), gregorian_seconds(), gregorian_seconds()) ->
-                                 {'ok', wh_proplist()}.
+                                 {'ok', crossbar_doc:view_options()}.
 create_view_options(Context, CreatedFrom, CreatedTo) ->
     {'ok', [{'startkey', CreatedTo}
             ,{'endkey', CreatedFrom}
